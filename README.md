@@ -1,5 +1,5 @@
-# my_ai_slop_collection
-A collection of vibe-coded app that might be useful
+# Vibe-coded & AI-slop collection
+A collection of vibe-coded apps that might be useful or slop.
 
 ## Playable Apps
 * [Banjir City River](https://felixsihombing.github.io/my_ai_slop_collection/Banjir%20City%20River.html)
