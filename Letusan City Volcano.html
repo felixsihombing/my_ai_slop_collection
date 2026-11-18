@@ -1,0 +1,683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Letusan City Volcano</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Third sheet in the set (traffic, river, volcano): the same night-time
+   contour map, but the subject is an eruption. Ash is pale grey, flying
+   blocks are orange, moving lava is yellow-orange and cooled lava is dark
+   red. Dashed lines are forecasts, solid lines are what has happened. */
+:root{
+  color-scheme:dark;
+  --night:#0b1016;
+  --panel:rgba(15,22,31,.92);
+  --line:#2b3747;
+  --ink:#e6edf3;
+  --muted:#8b9aac;
+  --sign:#6b3a2a;
+  --lamp:#f5b041;
+  --ash:#d8d2c8;
+  --block:#ff9f43;
+  --hot:#ffd166;
+  --crust:#8a2f25;
+  --stop:#ff5a4d;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--night);color:var(--ink);font-family:var(--body);font-size:14px;overflow:hidden;-webkit-user-select:none;user-select:none}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#map.drag{cursor:grabbing}
+.card{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:10px;backdrop-filter:blur(6px)}
+#status{top:16px;left:16px;width:292px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+h1{font-family:var(--display);font-weight:700;font-size:26px;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:12px;margin-top:4px}
+.clock{font-family:var(--display);font-weight:600;font-size:30px;line-height:1;font-variant-numeric:tabular-nums;text-align:right}
+.clock small{display:block;font-family:var(--body);font-weight:400;font-size:12px;color:var(--muted);margin-top:4px;white-space:nowrap}
+.pill{display:inline-flex;align-items:center;gap:7px;font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:4px;background:#1f8a5b;color:#fff;align-self:flex-start}
+.pill[data-l="1"]{background:#8a7a1f}
+.pill[data-l="2"]{background:#b0651c}
+.pill[data-l="3"]{background:#b3302a}
+.pill small{font-family:var(--body);font-weight:500;font-size:12px;letter-spacing:0;text-transform:none;opacity:.9}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 8px}
+.stat b{display:block;font-family:var(--display);font-weight:600;font-size:22px;line-height:1.05;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:11.5px}
+#spark{width:100%;height:44px;display:block}
+.cap{display:flex;justify-content:space-between;color:var(--muted);font-size:11.5px;margin-top:-6px}
+.legend{display:flex;gap:6px 12px;color:var(--muted);font-size:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+.legend i.dash{width:14px;height:0;border-radius:0;border-top:2px dashed var(--ash);vertical-align:middle}
+#dock{left:16px;right:16px;margin:0 auto;width:fit-content;bottom:16px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;max-width:min(calc(100% - 32px),1010px)}
+.row{display:flex;gap:10px 14px;align-items:center;flex-wrap:wrap;justify-content:center}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+button{font:500 13px var(--body);color:var(--ink);background:transparent;border:0;padding:8px 11px;cursor:pointer;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+button:hover{background:rgba(255,255,255,.06)}
+button[aria-pressed="true"]{background:var(--lamp);color:#1b1405;font-weight:600}
+button.solo{border:1px solid var(--line);border-radius:7px}
+button.go{background:#b3302a;border-color:#b3302a;color:#fff;font-weight:600}
+button.go:hover{background:#c93a33}
+button:disabled,input:disabled{opacity:.4;cursor:default}
+button:focus-visible,input:focus-visible{outline:2px solid var(--hot);outline-offset:2px}
+label.rng{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px}
+label.rng span{min-width:92px;font-variant-numeric:tabular-nums;color:var(--ink)}
+label.rng.short span{min-width:56px}
+input[type=range]{width:96px;accent-color:var(--lamp)}
+#hint{color:var(--muted);font-size:12.5px;text-align:center;min-height:1.3em}
+#tip{position:absolute;pointer-events:none;background:var(--sign);color:#fff;border-radius:5px;padding:6px 9px;font-size:12.5px;line-height:1.35;display:none;max-width:260px;box-shadow:0 4px 14px rgba(0,0,0,.45)}
+#tip b{font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:.02em;display:block}
+#attr{position:absolute;right:12px;top:12px;color:var(--muted);font-size:11.5px;text-align:right;max-width:220px;display:flex;flex-direction:column;align-items:flex-end;gap:8px}
+#scale{display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+#scale i{display:block;height:5px;border:1px solid var(--muted);border-top:0}
+#windbox{display:flex;align-items:center;gap:8px;color:var(--ink);font-size:12.5px}
+#windbox svg{width:34px;height:34px;flex:none}
+@media (max-width:720px){
+  #status{width:auto;right:16px;padding:10px 12px;gap:8px}
+  #spark,.cap,.legend,#attr{display:none}
+  h1{font-size:21px}.clock{font-size:24px}
+  .stats{gap:6px 8px}.stat b{font-size:19px}
+  #dock{padding:8px;gap:6px;left:8px;right:8px;bottom:8px;max-width:calc(100% - 16px)}
+  .row{gap:6px 8px}
+  button{padding:7px 7px;font-size:12px}
+  input[type=range]{width:64px}
+  label.rng{font-size:11.5px;gap:5px}
+  label.rng span{min-width:80px}label.rng.short span{min-width:48px}
+  #hint{font-size:11.5px}
+}
+</style>
+</head>
+<body>
+<canvas id="map" aria-label="Contour map of an invented volcano, its rivers and the towns below it, with ash fall, flying blocks and lava drawn as the eruption runs"></canvas>
+
+<section class="card" id="status" aria-live="off">
+  <div class="head">
+    <div><h1 id="city">Gunung</h1><div class="sub" id="seedline">Invented volcano</div></div>
+    <div class="clock"><span id="clock">00:00</span><small id="day">quiet</small></div>
+  </div>
+  <div class="pill" id="pill" data-l="0"><span id="pillt">Level I</span><small id="pills">normal</small></div>
+  <div class="stats">
+    <div class="stat"><b id="sCol">0</b><span>km of ash column above the vent</span></div>
+    <div class="stat"><b id="sReach">0</b><span>km downwind that 1 mm of ash reaches</span></div>
+    <div class="stat"><b id="sBall">0</b><span id="sBallL">km reach of flying blocks</span></div>
+    <div class="stat"><b id="sLava">0</b><span>km from vent to the lava front</span></div>
+    <div class="stat"><b id="sCity">0</b><span id="sCityL">mm of ash on the city centre</span></div>
+    <div class="stat"><b id="sBlocks">0</b><span>town blocks damaged</span></div>
+  </div>
+  <canvas id="spark" width="520" height="88"></canvas>
+  <div class="cap"><span>Ash depth at the city centre</span><span id="sparkMax"></span></div>
+  <div class="legend"><span><i style="background:var(--ash)"></i>ash in the air</span><span><i style="background:var(--block)"></i>block impact</span><span><i style="background:var(--hot)"></i>moving lava</span><span><i style="background:var(--crust)"></i>cooled lava</span><span><i class="dash"></i>forecast</span></div>
+</section>
+
+<div id="attr">
+  <div id="windbox"><span id="windT">Wind</span><svg viewBox="-20 -20 40 40" aria-hidden="true"><circle r="17" fill="none" stroke="#2b3747" stroke-width="1.5"/><text y="-9" text-anchor="middle" font-size="8" fill="#8b9aac" font-family="Barlow,sans-serif">N</text><g id="windA"><path d="M0 11V-9M-5-3 0-10 5-3" fill="none" stroke="#f5b041" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></g></svg></div>
+  <span>Ash lines at 1 mm, 1 cm, 10 cm and 1 m. Terrain contours every 100 m, heavier every 500 m.</span>
+  <div id="scale"><i></i><span>5 km</span></div>
+</div>
+
+<section class="card" id="dock">
+  <div class="row">
+    <div class="seg" role="group" aria-label="Map tool">
+      <button id="tInspect" aria-pressed="true">Inspect</button>
+      <button id="tVent" aria-pressed="false">Move vent</button>
+    </div>
+    <div class="seg" role="group" aria-label="Lava type">
+      <button id="lRunny" aria-pressed="true">Runny lava</button>
+      <button id="lSticky" aria-pressed="false">Sticky lava</button>
+    </div>
+    <div class="seg" role="group" aria-label="Simulation speed">
+      <button id="sp0" aria-pressed="false">Pause</button>
+      <button id="sp1" aria-pressed="false">1×</button>
+      <button id="sp4" aria-pressed="true">4×</button>
+      <button id="sp16" aria-pressed="false">16×</button>
+      <button id="sp64" aria-pressed="false">64×</button>
+    </div>
+    <button class="solo go" id="bErupt">Start eruption</button>
+    <button class="solo" id="bReset">Clear</button>
+    <button class="solo" id="bNew">New volcano</button>
+  </div>
+  <div class="row">
+    <label class="rng" for="vei">Explosivity <input type="range" id="vei" min="1" max="5" step="0.5" value="3"><span id="veiV">VEI 3</span></label>
+    <label class="rng short" for="wind">Wind <input type="range" id="wind" min="0" max="30" step="1" value="8"><span id="windV">8 m/s</span></label>
+    <label class="rng short" for="wdir">Blowing <input type="range" id="wdir" min="0" max="15" step="1" value="8"><span id="wdirV">to S</span></label>
+    <label class="rng short" for="lava">Lava <input type="range" id="lava" min="0" max="200" step="5" value="40"><span id="lavaV">40 m³/s</span></label>
+  </div>
+  <div id="hint">Dashed lines are the forecast for these settings. Press Start eruption to run it.</div>
+</section>
+<div id="tip"></div>
+
+<script id="sim">
+"use strict";
+// World: a 48 km square. North is up, the sea is along the south edge.
+// N x N terrain cells of CS metres. Ash depth is in millimetres, lava in metres.
+const N=241, CS=200, HALF=(N-1)*CS/2, G=9.81;
+// Ash: ten grain sizes, each with a settling speed, released from seven heights in the column.
+const PHI=[-4,-3,-2,-1,0,1,2,3,4,5], VSET=[25,18,12,8,5.5,3.3,1.8,.8,.4,.25];
+const HFR=[.35,.5,.6,.7,.8,.9,1], HWT=[.03,.07,.1,.15,.25,.25,.15];
+const BINS=[600,1800,3600,7200,14400,28800,57600,1e12];      // fall-time classes, seconds
+const KDIFF=2000, NDOT=5000, NBALL=1200, MAXDAYS=30;
+const COLH=[2,5,10,18,28], VMAXB=[100,150,200,250,300], VOLE=[5,6.5,7.5,8.5,9.5];   // by VEI 1..5: column km, block launch speed m/s, log10 of tephra volume m³
+const LAVA={runny:{mu:3e4,ty:3e3,hmin:2,hmax:6,name:"Basaltic"},sticky:{mu:1e8,ty:1e5,hmin:8,hmax:45,name:"Andesitic"}};
+const GW=(()=>{const w=PHI.map(p=>Math.exp(-(p-.5)*(p-.5)/12.5)),t=w.reduce((a,b)=>a+b);return w.map(v=>v/t)})();
+const lerpT=(T,v)=>{const f=Math.max(0,Math.min(T.length-1,v-1)),i=Math.min(T.length-2,f|0);return T[i]+(T[i+1]-T[i])*(f-i)};
+const GUNUNG=["Merbuana","Arjapura","Sindara","Wilangga","Raksagiri","Kalabumi","Bromasari","Semarta","Lawangi","Talagasura"];
+const SYL_A=["Tirta","Wana","Giri","Sura","Marga","Bumi","Nusa","Jaya","Karta","Sindang"];
+const SYL_B=["maya","wangi","pura","laya","sari","raja","mulya","asri","loka","kencana"];
+const KALI=["Bening","Lestari","Wening","Asri","Panjang","Gede","Tua","Besar","Sentosa","Raya"];
+const CI=["bodas","herang","beureum","hideung","awi","salak","jambe","tiis","haneut","leutik","kembang","pinang","kunir","lengkong","peundeuy","sampay","kuray","mara","gintung","lame","rengit","teureup","hanjuang","kadu"];
+const DESA=["Melati","Kenanga","Cempaka","Anggrek","Mawar","Flamboyan","Kemuning","Cendana","Teratai","Dahlia","Seruni","Beringin","Mahoni","Palem","Pelita","Harapan"];
+const mkRnd=s0=>{let s=s0>>>0;return()=>{s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}};
+
+function createSim(seed){
+  const rnd=mkRnd(seed);
+  const gauss=()=>{let u=0;while(u<1e-9)u=rnd();return Math.sqrt(-2*Math.log(u))*Math.cos(6.2832*rnd())};
+  const pick=A=>A[rnd()*A.length|0];
+  const gname="Gunung "+pick(GUNUNG), cname="Kota "+pick(SYL_A)+pick(SYL_B);
+
+  // ---------- terrain: a plain rising northward, one river valley, one cone ----------
+  const lt=new Float32Array(4096);for(let i=0;i<4096;i++)lt[i]=rnd();
+  const vn=(x,y)=>{const xi=Math.floor(x),yi=Math.floor(y);let fx=x-xi,fy=y-yi;fx=fx*fx*(3-2*fx);fy=fy*fy*(3-2*fy);
+    const a=lt[(yi&63)*64+(xi&63)],b=lt[(yi&63)*64+((xi+1)&63)],c=lt[((yi+1)&63)*64+(xi&63)],d=lt[((yi+1)&63)*64+((xi+1)&63)];
+    return a+(b-a)*fx+(c-a)*fy+(a-b-c+d)*fx*fy};
+  const fbm=(x,y)=>{let a=.5,f=1,q=0;for(let o=0;o<4;o++){q+=a*vn(x*f+o*17.3,y*f+o*9.1);a*=.5;f*=2}return q/.9375};
+  const sm=(v,a,b)=>{v=(v-a)/(b-a);v=v<0?0:v>1?1:v;return v*v*(3-2*v)};
+  const ph=rnd()*6.28, vx=(rnd()-.5)*9000, vy=-HALF*.36+(rnd()-.5)*3000;
+  const Hc=2300+rnd()*600, r0=4300+rnd()*700, ngul=7+(rnd()*5|0), breach=.6+rnd()*1.9;
+  const vamp=2000+rnd()*2200, voff=Math.max(-HALF*.62,Math.min(HALF*.62,vx>0?vx-9500-rnd()*2500:vx+9500+rnd()*2500));
+  const valleyX=y=>voff+Math.sin(y/9000+ph)*vamp+Math.sin(y/3300+ph*2)*500;
+  const coast=x=>HALF-2600+Math.sin(x/4500+ph)*650+Math.sin(x/1650+1)*200;
+  const el=new Float32Array(N*N),sea=new Uint8Array(N*N);
+  for(let j=0;j<N;j++)for(let i=0;i<N;i++){
+    const x=i*CS-HALF,y=j*CS-HALF,c=j*N+i,cy0=coast(x);
+    if(y>cy0){sea[c]=1;el[c]=-3;continue}
+    const t=Math.min(1,(cy0-y)/(2*HALF)),dx=x-valleyX(y),wall=1-Math.exp(-dx*dx/3.2e7);
+    let z=2+260*Math.pow(t,1.7)+wall*(12+150*t)+(fbm(x/6000+5,y/6000+5)-.5)*(10+330*t)+Math.abs(dx)/HALF*6;
+    const rx=x-vx,ry=y-vy,r=Math.hypot(rx,ry),th=Math.atan2(ry,rx);
+    let cone=Hc*Math.exp(-Math.max(r,900)/r0);
+    cone*=1+.09*Math.sin(th*ngul+3*fbm(r/2500+9+Math.cos(th),2+Math.sin(th)))*sm(r,900,3500)+.16*(fbm(x/2200+31,y/2200+17)-.5);
+    if(r<600)cone-=150*(1-r*r/360000);                                   // summit crater
+    let da=Math.abs(th-breach);if(da>Math.PI)da=6.2832-da;
+    if(da<.5&&r<1700)cone-=190*(1-da/.5)*(1-r/1700);                       // the crater rim is breached on one side
+    el[c]=Math.max(2,z+cone);
+  }
+  // Fill every hollow so all land drains to the sea, and record for each cell
+  // the neighbour it drains to (priority flood from the coast).
+  const recv=new Int32Array(N*N).fill(-1),order=[];
+  {const vis=new Uint8Array(N*N),hk=[],hi=[];
+   const push=(k,c)=>{let i=hk.length;hk.push(k);hi.push(c);while(i>0){const p=(i-1)>>1;if(hk[p]<=hk[i])break;let t=hk[p];hk[p]=hk[i];hk[i]=t;t=hi[p];hi[p]=hi[i];hi[i]=t;i=p}};
+   const pop=()=>{const c=hi[0],lk=hk.pop(),li=hi.pop();if(hk.length){hk[0]=lk;hi[0]=li;let i=0;for(;;){const a=2*i+1,b=a+1;let m=i;if(a<hk.length&&hk[a]<hk[m])m=a;if(b<hk.length&&hk[b]<hk[m])m=b;if(m===i)break;let t=hk[m];hk[m]=hk[i];hk[i]=t;t=hi[m];hi[m]=hi[i];hi[i]=t;i=m}}return c};
+   for(let c=0;c<N*N;c++)if(sea[c]){vis[c]=1;push(-3,c)}
+   while(hk.length){const c=pop();order.push(c);const ci=c%N,cj=c/N|0;
+     for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const i=ci+di,j=cj+dj;if(i<0||j<0||i>=N||j>=N)continue;
+       const nb=j*N+i;if(vis[nb])continue;vis[nb]=1;
+       if(!sea[c])el[nb]=Math.max(el[nb],el[c]+(di&&dj?.07:.05));
+       recv[nb]=c;push(el[nb],nb)}}}
+  const acc=new Float32Array(N*N);for(let c=0;c<N*N;c++)acc[c]=sea[c]?0:1;
+  for(let k=order.length-1;k>=0;k--){const c=order[k],r=recv[c];if(r>=0)acc[r]+=acc[c]}
+  const zg=(gx,gy)=>{gx=gx<0?0:gx>N-1.001?N-1.001:gx;gy=gy<0?0:gy>N-1.001?N-1.001:gy;const i=gx|0,j=gy|0,fx=gx-i,fy=gy-j,c=j*N+i;
+    return el[c]*(1-fx)*(1-fy)+el[c+1]*fx*(1-fy)+el[c+N]*(1-fx)*fy+el[c+N+1]*fx*fy};
+  const zw=(x,y)=>zg((x+HALF)/CS,(y+HALF)/CS);
+  const cellAt=(x,y)=>{let i=Math.round((x+HALF)/CS),j=Math.round((y+HALF)/CS);i=i<0?0:i>N-1?N-1:i;j=j<0?0:j>N-1?N-1:j;return j*N+i};
+  const cX=c=>(c%N)*CS-HALF, cY=c=>(c/N|0)*CS-HALF;
+
+  // ---------- rivers: wherever enough land drains through a cell ----------
+  const TH=170,isR=c=>!sea[c]&&acc[c]>=TH,nd=new Uint8Array(N*N);
+  for(let c=0;c<N*N;c++)if(isR(c)){const r=recv[c];if(r>=0&&isR(r))nd[r]++}
+  const reaches=[],reachAt=new Map(),riverCell=new Uint8Array(N*N);
+  for(let c=0;c<N*N;c++){
+    if(!isR(c)||nd[c]===1)continue;
+    const path=[c];let cur=c,mouth=false;
+    for(;;){const r=recv[cur];if(r<0)break;path.push(r);if(sea[r]){mouth=true;break}if(nd[r]>=2)break;cur=r}
+    if(path.length<2)continue;
+    let pts=path.map(p=>({x:cX(p),y:cY(p)}));
+    for(let it=0;it<2;it++){const q=[pts[0]];for(let k=0;k<pts.length-1;k++){const A=pts[k],B=pts[k+1];
+      q.push({x:A.x*.75+B.x*.25,y:A.y*.75+B.y*.25},{x:A.x*.25+B.x*.75,y:A.y*.25+B.y*.75})}
+      q.push(pts[pts.length-1]);pts=q}
+    const a1=acc[path[path.length-2]];
+    const R={id:reaches.length,start:c,end:path[path.length-1],mouth,pts,cells:path,a0:acc[c],a1,w:10+Math.sqrt((acc[c]+a1)/2),name:null,nameAcc:0,main:false};
+    for(let k=0;k<path.length-1;k++)riverCell[path[k]]=1;
+    reaches.push(R);reachAt.set(c,R);
+  }
+  // main stem: from the biggest mouth upstream, always taking the larger branch
+  const stem=[];{let cur=null;for(const R of reaches)if(R.mouth&&(!cur||R.a1>cur.a1))cur=R;
+    while(cur){cur.main=true;stem.push(cur);let b=null;for(const R of reaches)if(!R.mouth&&R.end===cur.start&&(!b||R.a1>b.a1))b=R;cur=b}}
+  {const pool=CI.slice();for(let i=pool.length-1;i>0;i--){const j=rnd()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]]}let pi=0;
+   for(const R of reaches.slice().sort((a,b)=>a.a0-b.a0)){if(!R.name)R.name="Ci"+pool[pi++%pool.length];
+     const dn=R.mouth?null:reachAt.get(R.end);if(dn&&R.a1>dn.nameAcc){dn.name=R.name;dn.nameAcc=R.a1}}
+   const kali="Kali "+pick(KALI);for(const R of stem)R.name=kali}
+
+  // ---------- the city on the plain, villages on the flanks ----------
+  let cx=0,cy=HALF*.42;{let bd=1e9;for(const R of stem)for(const c of R.cells){const d=Math.abs(cY(c)-HALF*.42);if(!sea[c]&&d<bd){bd=d;cx=cX(c);cy=cY(c)}}}
+  const places=[{x:cx,y:cy-900,name:cname,city:true}];
+  {const pool=DESA.slice();
+   for(let t=0;t<400&&places.length<9;t++){
+     const flank=places.length<5,a=rnd()*6.28,r=flank?4500+rnd()*6500:3000+rnd()*19000;
+     const x=flank?vx+Math.cos(a)*r:(rnd()-.5)*2*(HALF-2500),y=flank?vy+Math.sin(a)*r:-HALF*.2+rnd()*HALF*1.05,c=cellAt(x,y);
+     if(Math.abs(x)>HALF-2200||Math.abs(y)>HALF-1800||sea[c]||riverCell[c]||el[c]>1500||Math.hypot(x-vx,y-vy)<4000||Math.hypot(x-cx,y-cy)<6500||places.some(p=>Math.hypot(p.x-x,p.y-y)<3200))continue;
+     places.push({x,y,name:"Desa "+pool.splice(rnd()*pool.length|0,1)[0],city:false})}}
+  const dens=(x,y)=>{let d=Math.exp(-((x-cx)*(x-cx)+(y-cy)*(y-cy))/1.7e7);
+    for(const p of places)if(!p.city){const q=Math.exp(-((x-p.x)*(x-p.x)+(y-p.y)*(y-p.y))/9e5)*.75;if(q>d)d=q}return d};
+  const blocks=[],P=230;
+  for(let y=-HALF;y<HALF;y+=P)for(let x=-HALF;x<HALF;x+=P){
+    const bx=x+(rnd()-.5)*26,by=y+(rnd()-.5)*26,c=cellAt(bx,by),d=dens(bx,by),thr=.16+rnd()*.34;
+    if(sea[c]||el[c]>1600||d<thr||riverCell[c])continue;
+    blocks.push({x:bx-80,y:by-80,w:130+rnd()*45,h:130+rnd()*45,c,hit:false});
+  }
+
+  // ---------- state ----------
+  const dep=new Float32Array(N*N),fin=new Float32Array(N*N),fields=BINS.map(()=>new Float32Array(N*N)),tau=new Float32Array(BINS.length);
+  const lh=new Float32Array(N*N),born=new Float32Array(N*N).fill(-1),moved=new Float32Array(N*N).fill(-1e9),dl=new Float32Array(N*N),inAct=new Uint8Array(N*N);
+  const dx_=new Float32Array(NDOT),dy_=new Float32Array(NDOT),dd_=new Float32Array(NDOT);
+  let summit=0;for(let c=0;c<N*N;c++)if(el[c]>el[summit])summit=c;
+  const S={N,CS,HALF,el,sea,acc,zg,zw,cellAt,cX,cY,reaches,blocks,places,seed,name:gname,cityName:cname,riverName:stem.length?stem[0].name:"",
+    cx,cy,cityC:cellAt(cx,cy),summit,summitZ:el[summit],coneX:vx,coneY:vy,
+    dep,fin,fields,lh,moved,born,act:[],dotX:dx_,dotY:dy_,nd:0,ball:[],shown:0,
+    vei:3,wind:8,wdir:180,lavaQ:40,lavaType:"runny",phase:"idle",settled:false,te:0,D:0,tExpEnd:0,H:0,
+    reach1:0,reach10:0,ballFar:0,ball99:0,farShown:0,lastMove:-1e9,lavaPath:[]};
+  let src=[],cum=[],relAcc=0,ashPend=0,maxTau=0;
+  S.vent=cellAt(vx,vy);S.ventX=cX(S.vent);S.ventY=cY(S.vent);
+
+  // Column height from the erupted volume: the VEI gives a bulk tephra volume, a
+  // column height and, through the Mastin et al. (2009) relation between
+  // column height and eruption rate, how long the explosive phase lasts.
+  S.params=()=>{const H=lerpT(COLH,S.vei)*1000,vol=Math.pow(10,lerpT(VOLE,S.vei)),rate=Math.pow(H/2000,1/.241);
+    return{H,vol,mass:vol*1000,D:vol*.4/rate,vmax:lerpT(VMAXB,S.vei)}};
+  const windVec=()=>{const a=S.wdir*Math.PI/180;return[S.wind*Math.sin(a),-S.wind*Math.cos(a)]};
+
+  // Ash fall. Each (height, grain size) pair is a puff that drifts with the wind
+  // for as long as the grain takes to fall, spreading as it goes, and lands as a
+  // Gaussian patch. Patches are grouped by fall time so the deposit can build
+  // up in the right order: coarse ash near the vent first, fine ash far away later.
+  function buildAsh(){
+    const p=S.params(),[wx,wy]=windVec(),vz=el[S.vent]*.9,tm=new Float64Array(BINS.length),mk=new Float64Array(BINS.length);
+    for(const f of fields)f.fill(0);src=[];cum=[];let cm=0;maxTau=0;
+    for(let i=0;i<HFR.length;i++)for(let j=0;j<PHI.length;j++){
+      const t=(vz+HFR[i]*p.H)/VSET[j],m=p.mass*HWT[i]*GW[j],s0=.3*HFR[i]*p.H*Math.min(1,.25+.15*(PHI[j]+4))*(1+p.H*p.H/1.44e8),s2=s0*s0+2*KDIFF*t,X=S.ventX+wx*t,Y=S.ventY+wy*t;
+      let k=0;while(t>BINS[k])k++;
+      const A=m/(6.2832*s2);                                   // kg/m² at the centre; 1 kg/m² of ash is about 1 mm
+      src.push({t,s0,s2,A,k});cm+=m;cum.push(cm);tm[k]+=t*m;mk[k]+=m;if(t>maxTau)maxTau=t;
+      const R=4.3*Math.sqrt(s2),i0=Math.max(0,Math.ceil((X-R+HALF)/CS)),i1=Math.min(N-1,Math.floor((X+R+HALF)/CS)),
+        j0=Math.max(0,Math.ceil((Y-R+HALF)/CS)),j1=Math.min(N-1,Math.floor((Y+R+HALF)/CS)),f=fields[k],q=-.5/s2;
+      for(let jj=j0;jj<=j1;jj++){const yy=jj*CS-HALF-Y,y2=yy*yy;for(let ii=i0;ii<=i1;ii++){const xx=ii*CS-HALF-X;f[jj*N+ii]+=A*Math.exp(q*(xx*xx+y2))}}
+    }
+    for(let k=0;k<BINS.length;k++)tau[k]=mk[k]?tm[k]/mk[k]:0;
+    fin.fill(0);for(const f of fields)for(let c=0;c<N*N;c++)fin[c]+=f[c];
+    // how far downwind the 1 mm and 1 cm lines end, measured along the plume axis, well beyond the sheet
+    S.reach1=0;S.reach10=0;
+    for(let d=0;d<=6000e3;d+=d<200e3?1e3:5e3){let T=0;for(const q of src){const u=d-S.wind*q.t;T+=q.A*Math.exp(-.5*u*u/q.s2)}
+      if(T>=1)S.reach1=d;if(T>=10)S.reach10=d}
+  }
+  // Flying blocks. Each one is thrown from the vent with its own speed, angle
+  // and size, slowed by air drag, and followed until it meets the ground.
+  function buildBall(){
+    const p=S.params(),r=mkRnd(seed*7+13),out=[],rs=[],vz=el[S.vent]+15,X0=S.ventX,Y0=S.ventY;
+    for(let n=0;n<NBALL;n++){
+      const az=r()*6.2832,ang=(35+45*r())*Math.PI/180,v=p.vmax*(.3+.7*r()),d=.25+r()*r(),kd=.75*.7*1.2/(2500*d),ca=Math.cos(az),sa=Math.sin(az);
+      let x=0,z=vz,vh=v*Math.cos(ang),vv=v*Math.sin(ang),X=X0,Y=Y0;
+      for(let i=0;i<3000;i++){const a=kd*Math.exp(-z/8200)*Math.hypot(vh,vv);
+        vh-=a*vh*.2;vv-=(G+a*vv)*.2;x+=vh*.2;z+=vv*.2;X=X0+ca*x;Y=Y0+sa*x;
+        if(i>3&&z<=zw(X,Y))break}
+      out.push({x:X,y:Y,r:x,d,c:cellAt(X,Y)});rs.push(x)}
+    rs.sort((a,b)=>a-b);S.ball=out;S.ballFar=rs[NBALL-1];S.ball99=rs[NBALL*.99|0];
+  }
+  function buildPath(){const L=[];let c=S.vent;while(c>=0&&!sea[c]&&L.length<900){L.push(c);c=recv[c]}if(c>=0)L.push(c);S.lavaPath=L}
+  S.rebuild=()=>{buildAsh();if(S.phase==="idle"){buildBall();buildPath()}};
+  S.setVent=c=>{S.vent=c;S.ventX=cX(c);S.ventY=cY(c);S.rebuild()};
+
+  // Lava. A cell keeps a layer it cannot shed (set by the lava's strength and
+  // the slope) plus a crust that thickens with age; anything above that runs to
+  // lower neighbours at the speed of a viscous sheet on that slope (Jeffreys).
+  function stepLava(dt){
+    const L=LAVA[S.lavaType],act=S.act,te=S.te,area=CS*CS;
+    if(S.phase==="erupting"&&S.lavaQ>0){const v=S.vent;lh[v]+=S.lavaQ*dt/area;if(!inAct[v]){inAct[v]=1;act.push(v);born[v]=te}}
+    const n0=act.length,kf=2600*G/(3*L.mu)*dt/CS,qn=new Float64Array(8),dgs=new Float64Array(8),nbs=new Int32Array(8);
+    for(let a=0;a<n0;a++){
+      const c=act[a],hh=lh[c];if(hh<=0)continue;
+      const ci=c%N,cj=c/N|0,s=el[c]+hh;let m=0,smax=0;
+      for(let dj=-1;dj<=1;dj++)for(let di=-1;di<=1;di++){if(!di&&!dj)continue;const i=ci+di,j=cj+dj;if(i<0||j<0||i>=N||j>=N)continue;
+        const nb=j*N+i,sn=el[nb]+lh[nb];if(sn>=s)continue;const dg=di&&dj,sl=(s-sn)/(dg?CS*1.4142:CS);
+        nbs[m]=nb;qn[m]=sl;dgs[m]=dg?.7:1;if(sl>smax)smax=sl;m++}
+      if(!m)continue;
+      let hc=L.ty/(2600*G*Math.max(.02,smax));hc=hc<L.hmin?L.hmin:hc>L.hmax?L.hmax:hc;
+      const hm=hh-hc-Math.min(hh,2.3*Math.sqrt(1e-6*(te-born[c])));if(hm<=0)continue;
+      let tot=0;const h3=hm*hm*hm*kf;
+      for(let q=0;q<m;q++){const cap=.25*(s-el[nbs[q]]-lh[nbs[q]]);const w=qn[q]/smax;let f=h3*qn[q]*dgs[q]*w*w*w;if(f>cap)f=cap;qn[q]=f;tot+=f}
+      const sc=tot>hm*.9?hm*.9/tot:1;if(tot*sc<1e-7)continue;
+      for(let q=0;q<m;q++){const f=qn[q]*sc,nb=nbs[q];dl[nb]+=f;if(!inAct[nb]){inAct[nb]=1;act.push(nb);born[nb]=te}}
+      dl[c]-=tot*sc;if(tot*sc>dt*5e-5){moved[c]=te;S.lastMove=te}
+    }
+    for(let a=0;a<act.length;a++){const c=act[a];if(dl[c]){lh[c]+=dl[c];dl[c]=0}}
+  }
+  const Rf=t=>Math.max(0,Math.min(t,S.tExpEnd))/S.D;        // share of the ash and blocks thrown out by time t
+  function flushAsh(){if(ashPend<=0)return;const t1=S.te,t0=t1-ashPend;ashPend=0;
+    for(let k=0;k<BINS.length;k++){const df=Rf(t1-tau[k])-Rf(t0-tau[k]);if(df>0){const f=fields[k];for(let c=0;c<N*N;c++)dep[c]+=df*f[c]}}}
+
+  S.erupt=()=>{if(S.phase!=="idle")return;const p=S.params();S.phase="erupting";S.settled=false;S.te=0;S.D=p.D;S.tExpEnd=p.D;S.H=p.H;relAcc=0;ashPend=0};
+  S.stop=()=>{if(S.phase!=="erupting")return;flushAsh();if(S.te<S.tExpEnd)S.tExpEnd=S.te;S.phase="ended"};
+  S.reset=()=>{S.phase="idle";S.settled=false;S.te=0;dep.fill(0);lh.fill(0);born.fill(-1);moved.fill(-1e9);dl.fill(0);inAct.fill(0);S.act.length=0;
+    S.nd=0;S.shown=0;S.farShown=0;S.lastMove=-1e9;for(const b of blocks)b.hit=false;S.rebuild()};
+  S.step=dt=>{
+    if(S.phase==="idle"||S.settled)return;
+    const t0=S.te;S.te+=dt;const te=S.te;
+    // ash still in the air: dots drift with the wind until their grain size has had time to fall
+    if(t0<S.tExpEnd){relAcc+=NDOT*Math.min(dt,S.tExpEnd-t0)/S.D;
+      while(relAcc>=1){relAcc--;if(S.nd>=NDOT)continue;const u=rnd()*cum[cum.length-1];let k=0;while(cum[k]<u)k++;const q=src[k],n=S.nd++;
+        dx_[n]=S.ventX+gauss()*q.s0;dy_[n]=S.ventY+gauss()*q.s0;dd_[n]=t0+q.t}}
+    {const [wx,wy]=windVec(),sg=Math.sqrt(2*KDIFF*dt);
+     for(let n=S.nd-1;n>=0;n--){if(te>dd_[n]){const l=--S.nd;dx_[n]=dx_[l];dy_[n]=dy_[l];dd_[n]=dd_[l];continue}
+       dx_[n]+=wx*dt+gauss()*sg;dy_[n]+=wy*dt+gauss()*sg}}
+    const sh=Math.min(NBALL,Math.floor(NBALL*Rf(te)));
+    for(;S.shown<sh;S.shown++){const b=S.ball[S.shown];if(b.r>S.farShown)S.farShown=b.r}
+    ashPend+=dt;if(ashPend>=120)flushAsh();
+    stepLava(dt);
+    if(S.phase==="erupting"&&(te>MAXDAYS*86400||(te>=S.tExpEnd&&S.lavaQ<=0)))S.stop();
+    if(S.phase==="ended"&&te-S.tExpEnd>maxTau+600&&te-S.lastMove>7200){flushAsh();S.settled=true}
+  };
+  S.explosive=()=>S.phase==="erupting"&&S.te<S.tExpEnd;
+  S.stats=()=>{let front=0,cells=0,vol=0;
+    for(const c of S.act){const h=lh[c];if(h<.3)continue;cells++;vol+=h;const d=Math.hypot(cX(c)-S.ventX,cY(c)-S.ventY);if(d>front)front=d}
+    const hitC=new Uint8Array(N*N);for(let i=0;i<S.shown;i++)hitC[S.ball[i].c]=1;
+    let nl=0,na=0,nb=0,any=0;for(const b of blocks){b.hit=!!hitC[b.c];const l=lh[b.c]>=1,a=dep[b.c]>=100;if(l)nl++;if(a)na++;if(b.hit)nb++;if(l||a||b.hit)any++}
+    let ash10=0;for(let c=0;c<N*N;c++)if(!sea[c]&&dep[c]>=10)ash10++;
+    return{front,lavaKm2:cells*CS*CS/1e6,lavaVol:vol*CS*CS,blocks:any,buried:nl,ashHeavy:na,struck:nb,ash10Km2:ash10*CS*CS/1e6,cityAsh:dep[S.cityC]}};
+  S.rebuild();
+  return S;
+}
+</script>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const cv=$("map"),ctx=cv.getContext("2d"),tip=$("tip");
+const COL={night:"#0b1016",channel:"#1a4a6c",channelHi:"#3a86b8",ash:"#d8d2c8",block:"#ff9f43",label:"#8fa0b3",water:"#6fb7d8",iso:"rgba(232,226,214,"};
+const SIMX=300;                       // simulated seconds per real second at 1×
+const COMPASS=["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
+const ISO=[1,10,100,1000],ISOT=["1 mm","1 cm","10 cm","1 m"];
+let sim,W=0,H=0,dpr=1,cam={x:0,y:0,k:.016},speed=4,tool="inspect",hoverR=null,hist=[];
+let land=null,paths=null,stat=null,sctx=null,sDirty=true,ovA=null,ovL=null,isoNow=[],isoFc=[],needBuild=false,first=true;
+
+// ---------- static map layers ----------
+const RAMP=[[-3,9,24,38],[0,15,30,33],[10,19,35,33],[60,24,40,34],[150,33,44,35],[400,46,47,36],[900,58,51,39],[1600,74,62,48],[2400,92,80,68],[3200,112,102,94]];
+function tint(z){let k=1;while(k<RAMP.length-1&&RAMP[k][0]<z)k++;const A=RAMP[k-1],B=RAMP[k];let f=(z-A[0])/(B[0]-A[0]);f=f<0?0:f>1?1:f;
+  return[A[1]+(B[1]-A[1])*f,A[2]+(B[2]-A[2])*f,A[3]+(B[3]-A[3])*f]}
+const X=i=>i*CS-HALF;
+// one marching-squares cell: add the line where the surface crosses level L
+function seg(p,L,i,j,a,b,c2,d2,far){
+  const id=(a>L)|(b>L)<<1|(c2>L)<<2|(d2>L)<<3;if(!id||id===15)return;
+  const T=[X(i)+CS*(L-a)/(b-a),X(j)],Rr=[X(i+1),X(j)+CS*(L-b)/(c2-b)],B=[X(i)+CS*(L-d2)/(c2-d2),X(j+1)],Lf=[X(i),X(j)+CS*(L-a)/(d2-a)];
+  const ln=(u,v)=>{p.moveTo(u[0],u[1]);p.lineTo(v[0],v[1]);if(far){const d=(u[0]-far.vx)*(u[0]-far.vx)+(u[1]-far.vy)*(u[1]-far.vy);if(d>far.d){far.d=d;far.x=u[0];far.y=u[1]}}};
+  switch(id){case 1:case 14:ln(Lf,T);break;case 2:case 13:ln(T,Rr);break;case 3:case 12:ln(Lf,Rr);break;case 4:case 11:ln(Rr,B);break;
+    case 6:case 9:ln(T,B);break;case 7:case 8:ln(Lf,B);break;case 5:ln(Lf,T);ln(Rr,B);break;case 10:ln(T,Rr);ln(Lf,B);break}}
+function isoLines(f){const out=[];
+  for(let q=0;q<ISO.length;q++){const L=ISO[q],p=new Path2D,far={vx:sim.ventX,vy:sim.ventY,d:-1,x:0,y:0};
+    for(let j=0;j<N-1;j++)for(let i=0;i<N-1;i++){const o=j*N+i,a=f[o],b=f[o+1],c2=f[o+N+1],d2=f[o+N];
+      if((a>L)===(b>L)&&(b>L)===(c2>L)&&(c2>L)===(d2>L))continue;seg(p,L,i,j,a,b,c2,d2,far)}
+    if(far.d>=0)out.push({p,t:ISOT[q],x:far.x,y:far.y,w:1+q*.45})}
+  return out}
+function buildLand(){
+  const R=4*N,c=document.createElement("canvas");c.width=c.height=R;const g=c.getContext("2d"),im=g.createImageData(R,R),d=im.data;
+  for(let py=0;py<R;py++)for(let px=0;px<R;px++){
+    const gx=(px+.5)/4-.5,gy=(py+.5)/4-.5,z=sim.zg(gx,gy),o=(py*R+px)*4;
+    if(z<-.2){d[o]=9;d[o+1]=24;d[o+2]=40;d[o+3]=255;continue}
+    const sh=1+Math.max(-.34,Math.min(.42,((sim.zg(gx+.5,gy)-sim.zg(gx-.5,gy))+(sim.zg(gx,gy+.5)-sim.zg(gx,gy-.5)))*.0055));
+    const t=tint(z);d[o]=t[0]*sh;d[o+1]=t[1]*sh;d[o+2]=t[2]*sh;d[o+3]=255}
+  g.putImageData(im,0,0);land=c;
+  const mk=()=>{const o=document.createElement("canvas");o.width=o.height=N;const x=o.getContext("2d");return{cv:o,ctx:x,img:x.createImageData(N,N)}};
+  ovA=mk();ovL=mk();
+  const P={minor:new Path2D,major:new Path2D,low:new Path2D,coast:new Path2D,blocks:new Path2D},el=sim.el;
+  for(let j=0;j<N-1;j++)for(let i=0;i<N-1;i++){
+    const a=el[j*N+i],b=el[j*N+i+1],c2=el[(j+1)*N+i+1],d2=el[(j+1)*N+i],mn=Math.min(a,b,c2,d2),mx=Math.max(a,b,c2,d2);
+    if(mn<0&&mx>0)seg(P.coast,0,i,j,a,b,c2,d2);
+    if(mn<0)continue;
+    if(mn<300)for(const L of [5,10,25,50,75,125,150,175,225,250,275])if(L>mn&&L<mx)seg(P.low,L+.01,i,j,a,b,c2,d2);
+    for(let L=Math.ceil(mn/100)*100;L<mx;L+=100)if(L>mn)seg(L%500?P.minor:P.major,L+.01,i,j,a,b,c2,d2)}
+  for(const b of sim.blocks)P.blocks.rect(b.x,b.y,b.w,b.h);
+  P.labels=[];const cols=[N*.1|0,N*.9|0,sim.summit%N];
+  for(const i of cols)for(let j=1;j<N-1;j++)for(const L of [100,500,1000,1500,2000,2500])
+    if((el[j*N+i]-L)*(el[(j+1)*N+i]-L)<0)P.labels.push({x:X(i),y:X(j)+CS/2,t:L+" m"});
+  const byName=new Map;for(const R2 of sim.reaches){const b=byName.get(R2.name);if(!b||R2.pts.length>b.pts.length)byName.set(R2.name,R2)}
+  P.named=[...byName.values()];
+  paths=P;sDirty=true;
+}
+
+function newCity(seed){
+  sim=createSim(seed);hist=[];
+  if(first){first=false;const b=Math.atan2(sim.cx-sim.ventX,-(sim.cy-sim.ventY))*180/Math.PI;$("wdir").value=((Math.round(b/22.5)%16)+16)%16}
+  $("city").textContent=sim.name;$("seedline").textContent="Invented volcano above "+sim.cityName+" · sheet no. "+seed;
+  readControls();sim.rebuild();buildLand();isoFc=isoLines(sim.fin);isoNow=[];fit();lock();updateHud();
+}
+function readControls(){
+  sim.vei=+$("vei").value;sim.wind=+$("wind").value;sim.wdir=+$("wdir").value*22.5;sim.lavaQ=+$("lava").value;
+  sim.lavaType=$("lRunny").getAttribute("aria-pressed")==="true"?"runny":"sticky";
+  const p=sim.params();
+  $("veiV").textContent="VEI "+sim.vei+" · "+(p.H/1000).toFixed(p.H<3000?1:0)+" km";
+  $("windV").textContent=sim.wind?sim.wind+" m/s":"calm";$("wdirV").textContent="to "+COMPASS[+$("wdir").value];
+  $("lavaV").textContent=sim.lavaQ?sim.lavaQ+" m³/s":"none";
+  $("windA").setAttribute("transform","rotate("+sim.wdir+")");$("windA").style.opacity=sim.wind?1:.25;
+  $("windT").textContent=sim.wind?"Wind "+sim.wind+" m/s toward "+COMPASS[+$("wdir").value]:"No wind";
+}
+function fit(){const side=$("status").getBoundingClientRect(),dock=$("dock").getBoundingClientRect(),wide=W>720;
+  const availW=wide?W-side.right-24:W,availH=wide?H-dock.height-50:H-side.bottom-dock.height-20;
+  cam.k=Math.max(.004,Math.min(availW,availH)/(HALF*2.08));cam.x=wide?-(side.right/2)/cam.k:0;cam.y=wide?(dock.height/2)/cam.k:((dock.height-side.bottom)/2)/cam.k;sDirty=true}
+function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr;
+  if(!stat){stat=document.createElement("canvas");sctx=stat.getContext("2d")}stat.width=cv.width;stat.height=cv.height;sDirty=true}
+const sx=x=>(x-cam.x)*cam.k+W/2, sy=y=>(y-cam.y)*cam.k+H/2;
+const wx=x=>(x-W/2)/cam.k+cam.x, wy=y=>(y-H/2)/cam.k+cam.y;
+const world=g=>g.setTransform(dpr*cam.k,0,0,dpr*cam.k,dpr*(W/2-cam.x*cam.k),dpr*(H/2-cam.y*cam.k));
+
+// land, contours, rivers and towns only change when the view moves, so they are drawn once and kept
+function drawStatic(){
+  const g=sctx,k=cam.k,ext=HALF+CS/2;sDirty=false;
+  g.setTransform(dpr,0,0,dpr,0,0);g.fillStyle=COL.night;g.fillRect(0,0,W,H);
+  world(g);g.imageSmoothingEnabled=true;g.imageSmoothingQuality="high";
+  g.drawImage(land,-ext,-ext,2*ext,2*ext);
+  g.save();g.beginPath();g.rect(-HALF,-HALF,2*HALF,2*HALF);g.clip();
+  g.lineWidth=1/k;g.strokeStyle="rgba(196,170,120,.12)";g.stroke(paths.low);
+  g.strokeStyle="rgba(196,170,120,.22)";g.stroke(paths.minor);
+  g.lineWidth=1.5/k;g.strokeStyle="rgba(214,186,130,.5)";g.stroke(paths.major);
+  g.lineWidth=1.2/k;g.strokeStyle="rgba(111,183,216,.55)";g.stroke(paths.coast);
+  g.lineCap="round";g.lineJoin="round";
+  for(const R of sim.reaches){g.strokeStyle=R===hoverR?COL.channelHi:COL.channel;g.lineWidth=Math.max(R.w,(1.1+R.w*.012)/k);
+    g.beginPath();R.pts.forEach((p,i)=>i?g.lineTo(p.x,p.y):g.moveTo(p.x,p.y));g.stroke()}
+  g.restore();
+  g.fillStyle="rgba(205,218,235,.2)";g.fill(paths.blocks);
+}
+
+function paintOverlays(){
+  const dep=sim.dep,lh=sim.lh,mv=sim.moved,te=sim.te,a=ovA.img.data,l=ovL.img.data;
+  for(let c=0;c<N*N;c++){const o=c*4,v=dep[c];
+    a[o]=214;a[o+1]=208;a[o+2]=198;a[o+3]=v<=.1?0:Math.min(150,40*Math.log10(v/.1));
+    const h=lh[c];if(h<.05){l[o+3]=0;continue}
+    const age=(te-mv[c])/3600,hot=age<2?1:age>26?0:1-(age-2)/24;     // glows while it moves, darkens over a day
+    l[o]=118+137*hot;l[o+1]=34+150*hot*hot;l[o+2]=28+40*hot*hot*hot;l[o+3]=Math.min(240,90+h*150)}
+  ovA.ctx.putImageData(ovA.img,0,0);ovL.ctx.putImageData(ovL.img,0,0);
+}
+function isoDraw(list,dash,alpha){const k=cam.k;
+  for(const q of list){ctx.strokeStyle=COL.iso+alpha+")";ctx.lineWidth=q.w*1.3/k;ctx.setLineDash(dash?[7/k,6/k]:[]);ctx.stroke(q.p)}ctx.setLineDash([])}
+function isoLabels(list,suffix){ctx.font="600 11.5px Barlow,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+  for(const q of list){const x=Math.max(sx(-HALF)+22,Math.min(sx(HALF)-22,sx(q.x))),y=Math.max(sy(-HALF)+10,Math.min(sy(HALF)-10,sy(q.y)));
+    const t=q.t+suffix,w=ctx.measureText(t).width+8;ctx.fillStyle="rgba(11,16,22,.85)";ctx.fillRect(x-w/2,y-8,w,16);ctx.fillStyle="#ece6da";ctx.fillText(t,x,y)}}
+
+function draw(now){
+  const k=cam.k,ext=HALF+CS/2,idle=sim.phase==="idle";
+  if(sDirty)drawStatic();
+  ctx.setTransform(1,0,0,1,0,0);ctx.drawImage(stat,0,0);
+  world(ctx);ctx.imageSmoothingEnabled=true;ctx.imageSmoothingQuality="high";
+  ctx.save();ctx.beginPath();ctx.rect(-HALF,-HALF,2*HALF,2*HALF);ctx.clip();
+  if(!idle){
+    ctx.drawImage(ovA.cv,-ext,-ext,2*ext,2*ext);
+    // damaged town blocks: pale under heavy ash, orange where a block landed, red under lava
+    const pa=new Path2D,pb=new Path2D,pl=new Path2D;
+    for(const b of sim.blocks){if(sim.lh[b.c]>=1)pl.rect(b.x,b.y,b.w,b.h);else if(b.hit)pb.rect(b.x,b.y,b.w,b.h);else if(sim.dep[b.c]>=100)pa.rect(b.x,b.y,b.w,b.h)}
+    ctx.fillStyle="rgba(240,236,228,.6)";ctx.fill(pa);ctx.fillStyle="rgba(255,159,67,.85)";ctx.fill(pb);
+    {const r=Math.max(1.5/k,Math.min(4.5/k,45)),B=new Path2D;
+     for(let i=0;i<sim.shown;i++){const b=sim.ball[i];B.moveTo(b.x+r,b.y);B.arc(b.x,b.y,r,0,6.2832)}
+     ctx.fillStyle="rgba(255,159,67,.8)";ctx.fill(B)}
+    ctx.drawImage(ovL.cv,-ext,-ext,2*ext,2*ext);
+    ctx.fillStyle="rgba(255,96,84,.9)";ctx.fill(pl);
+    isoDraw(isoNow,false,.8);
+  }else{
+    isoDraw(isoFc,true,.7);
+    // forecast: the reach of flying blocks, and the line lava would follow downhill from the vent
+    ctx.strokeStyle="rgba(255,159,67,.85)";ctx.lineWidth=1.6/k;ctx.setLineDash([7/k,6/k]);ctx.beginPath();ctx.arc(sim.ventX,sim.ventY,sim.ballFar,0,6.2832);ctx.stroke();
+    if(sim.lavaQ>0&&sim.lavaPath.length>1){ctx.strokeStyle="rgba(255,120,60,.9)";ctx.lineWidth=2/k;ctx.setLineDash([2/k,5/k]);ctx.lineCap="round";ctx.beginPath();
+      sim.lavaPath.forEach((c,i)=>i?ctx.lineTo(sim.cX(c),sim.cY(c)):ctx.moveTo(sim.cX(c),sim.cY(c)));ctx.stroke()}
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+
+  // ---- screen space from here ----
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  if(!idle){
+    const sz=Math.max(1.8,Math.min(3.4,90*k)),hz=sz/2,A=new Path2D;
+    for(let n=0;n<sim.nd;n++){const x=sx(sim.dotX[n]),y=sy(sim.dotY[n]);if(x<0||y<0||x>W||y>H)continue;A.rect(x-hz,y-hz,sz,sz)}
+    ctx.fillStyle="rgba(216,210,200,.7)";ctx.fill(A);
+  }
+  // sheet edge
+  ctx.strokeStyle="rgba(139,154,172,.45)";ctx.lineWidth=1;ctx.strokeRect(sx(-HALF),sy(-HALF),2*HALF*k,2*HALF*k);
+  // vent
+  {const x=sx(sim.ventX),y=sy(sim.ventY);
+   if(sim.explosive()){const rr=Math.max(16,.22*sim.H*k)*(1+.08*Math.sin(now/90)),g=ctx.createRadialGradient(x,y,0,x,y,rr);
+     g.addColorStop(0,"rgba(255,214,140,.75)");g.addColorStop(.35,"rgba(255,140,60,.32)");g.addColorStop(1,"rgba(255,120,60,0)");ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,rr,0,6.2832);ctx.fill()}
+   ctx.fillStyle=idle?"#fff":"#ffd166";ctx.strokeStyle="#0b1016";ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(x,y-7);ctx.lineTo(x+6.5,y+5);ctx.lineTo(x-6.5,y+5);ctx.closePath();ctx.stroke();ctx.fill()}
+  // labels
+  ctx.textAlign="center";ctx.textBaseline="middle";
+  ctx.font="500 11px Barlow,sans-serif";ctx.fillStyle="rgba(214,186,130,.75)";
+  for(const l of paths.labels)ctx.fillText(l.t,sx(l.x),sy(l.y));
+  ctx.font="italic 600 13px 'Barlow Condensed',sans-serif";ctx.fillStyle=COL.water;
+  for(const R of paths.named){const n=R.pts.length;if(!R.main&&(k<.011||n<(k>.03?10:k>.015?24:60)))continue;const A=R.pts[(n>>1)-1]||R.pts[0],B=R.pts[n>>1];
+    let a=Math.atan2(B.y-A.y,B.x-A.x);if(a>1.571||a<-1.571)a+=3.1416;
+    ctx.save();ctx.translate(sx(B.x),sy(B.y));ctx.rotate(a);ctx.fillText(R.name,0,-Math.max(R.w*k/2,1)-8);ctx.restore()}
+  if(k>.009)for(const p of sim.places){ctx.font="600 "+(p.city?14:12)+"px 'Barlow Condensed',sans-serif";ctx.fillStyle=p.city?"#c9d4e0":COL.label;
+    ctx.save();ctx.translate(sx(p.x),sy(p.y)-(p.city?0:11));ctx.letterSpacing="1px";ctx.fillText(p.name.toUpperCase(),0,0);ctx.restore()}
+  ctx.font="600 12px 'Barlow Condensed',sans-serif";ctx.fillStyle="rgba(143,160,179,.8)";ctx.fillText("LAUT · SEA",sx(0),sy(HALF-900));
+  ctx.font="600 13px 'Barlow Condensed',sans-serif";ctx.fillStyle="#e6edf3";
+  ctx.fillText(sim.name.toUpperCase()+" · "+Math.round(sim.summitZ).toLocaleString("en-US")+" m",sx(sim.cX(sim.summit)),sy(sim.cY(sim.summit))-17);
+  if(idle){isoLabels(isoFc," forecast");
+    ctx.font="600 11.5px Barlow,sans-serif";ctx.fillStyle="#ffb672";ctx.fillText("blocks reach "+(sim.ballFar/1000).toFixed(1)+" km",sx(sim.ventX),sy(sim.ventY+sim.ballFar)+11)}
+  else isoLabels(isoNow,"");
+  // scale bar
+  let m=20000;for(const v of [20000,10000,5000,2000,1000,500,200])if(v*k<=150){m=v;break}
+  if(draw.m!==m||draw.k!==k){draw.m=m;draw.k=k;$("scale").firstChild.style.width=(m*k)+"px";$("scale").lastChild.textContent=m>=1000?m/1000+" km":m+" m"}
+}
+
+const fmtAsh=mm=>mm<.1?"no ash":mm<10?mm.toFixed(1)+" mm":mm<1000?(mm/10).toFixed(mm<100?1:0)+" cm":(mm/1000).toFixed(1)+" m";
+const km=m=>m>=99500?Math.round(m/1000).toLocaleString("en-US"):(m/1000).toFixed(1);
+function sample(){hist.push(sim.dep[sim.cityC]);if(hist.length>260)hist.shift()}
+function lock(){const idle=sim.phase==="idle";$("vei").disabled=!idle;$("tVent").disabled=!idle;
+  const b=$("bErupt");b.textContent=sim.phase==="erupting"?"Stop eruption":"Start eruption";b.disabled=sim.phase==="ended";b.classList.toggle("go",sim.phase!=="ended")}
+function updateHud(){
+  const s=sim.stats(),idle=sim.phase==="idle",p=sim.params(),t=sim.te;
+  if(idle){$("clock").textContent="00:00";$("day").textContent="quiet"}
+  else{const m=t/60|0;$("clock").textContent=String((m/60|0)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");$("day").textContent="Day "+((m/1440|0)+1)+" of eruption"}
+  $("sCol").textContent=((idle?p.H:sim.H)/1000).toFixed(1);
+  $("sReach").textContent=km(sim.reach1);
+  $("sBall").textContent=km(idle?sim.ballFar:sim.farShown);$("sBallL").textContent=idle?"km reach of flying blocks, forecast":"km to the farthest block so far";
+  $("sLava").textContent=km(s.front);
+  const ca=idle?sim.fin[sim.cityC]:s.cityAsh;$("sCity").textContent=ca<.05?"0":ca<10?ca.toFixed(1):Math.round(ca).toLocaleString("en-US");
+  $("sCityL").textContent=idle?"mm of ash on the city centre, forecast":"mm of ash on the city centre";
+  $("sBlocks").textContent=s.blocks.toLocaleString("en-US");
+  const air=sim.nd>0,lavaOn=sim.te-sim.lastMove<7200;
+  const lv=idle?0:sim.phase==="erupting"?3:sim.settled?1:2;
+  $("pill").dataset.l=lv;$("pillt").textContent=["Level I","Level II · Waspada","Level III · Siaga","Level IV · Awas"][lv];
+  $("pills").textContent=idle?"normal":sim.phase==="erupting"?(sim.explosive()?"explosive phase":"lava still erupting"):sim.settled?"eruption over":air&&lavaOn?"ash falling, lava moving":air?"ash still falling":"lava still moving";
+  if(sim.phase!==lock.p){lock.p=sim.phase;lock();if(sim.phase==="ended")say("The vent has shut. Ash already in the air keeps falling and lava keeps draining downhill.")}
+  // ash depth at the city centre
+  const sp=$("spark"),g=sp.getContext("2d"),w=sp.width,hh=sp.height,top=Math.max(5,...hist)*1.2;g.clearRect(0,0,w,hh);
+  const Xs=i=>i/Math.max(40,hist.length-1)*(w-6),Ys=v=>hh-4-v/top*(hh-8);
+  if(top>100){g.strokeStyle="#5b6b7d";g.lineWidth=1.5;g.setLineDash([6,6]);g.beginPath();g.moveTo(0,Ys(100));g.lineTo(w,Ys(100));g.stroke();g.setLineDash([])}
+  if(hist.length>1){g.beginPath();hist.forEach((v,i)=>i?g.lineTo(Xs(i),Ys(v)):g.moveTo(Xs(i),Ys(v)));g.strokeStyle=COL.ash;g.lineWidth=2.5;g.stroke();
+    g.lineTo(Xs(hist.length-1),hh);g.lineTo(0,hh);g.closePath();g.fillStyle="rgba(216,210,200,.15)";g.fill();
+    g.fillStyle="#fff";g.beginPath();g.arc(Xs(hist.length-1),Ys(hist[hist.length-1]),4,0,6.3);g.fill()}
+  $("sparkMax").textContent="0–"+fmtAsh(top)+(top>100?" · dashed: 10 cm":"");
+  if(!idle){paintOverlays();isoNow=isoLines(sim.dep)}
+}
+
+let lastT=0,hudT=0,sampT=0;
+function frame(t){
+  const real=Math.min(.05,(t-lastT)/1000||0);lastT=t;
+  if(needBuild){needBuild=false;sim.rebuild();if(sim.phase==="idle")isoFc=isoLines(sim.fin);hudT=0}
+  if(speed>0&&sim.phase!=="idle"&&!sim.settled){let rem=real*speed*SIMX;while(rem>.5){const d=Math.min(120,rem);sim.step(d);rem-=d}
+    if(sim.te-sampT>600||sim.te<sampT){sampT=sim.te;sample()}}
+  draw(t);
+  if(t-hudT>300){hudT=t;updateHud();if(lastPtr&&!ptr.size)showTip(lastPtr.x,lastPtr.y)}
+  requestAnimationFrame(frame);
+}
+
+// ---------- picking ----------
+function nearestRiver(px,py){let best=null,bd=9/cam.k;
+  for(const R of sim.reaches){const P=R.pts;for(let i=0;i<P.length;i+=2){const d=Math.hypot(P[i].x-px,P[i].y-py)-R.w/2;if(d<bd){bd=d;best=R}}}return best}
+function showTip(Xp,Yp){
+  const px=wx(Xp),py=wy(Yp);if(Math.abs(px)>HALF||Math.abs(py)>HALF){tip.style.display="none";return}
+  const c=sim.cellAt(px,py),idle=sim.phase==="idle",dv=Math.hypot(px-sim.ventX,py-sim.ventY),R=nearestRiver(px,py);
+  if(R!==hoverR){hoverR=R;sDirty=true}
+  let title,body=[];
+  if(sim.sea[c])title="Sea";else title=(R?R.name+" · ":"")+Math.round(sim.el[c]).toLocaleString("en-US")+" m above sea level";
+  body.push((dv/1000).toFixed(1)+" km from the vent");
+  if(idle){body.push("ash forecast "+fmtAsh(sim.fin[c]));if(dv<=sim.ballFar)body.push("within reach of flying blocks")}
+  else{body.push("ash "+fmtAsh(sim.dep[c]));const h=sim.lh[c];if(h>=.05)body.push("lava "+h.toFixed(h<10?1:0)+" m thick"+(sim.te-sim.moved[c]<7200?", still moving":""));
+    if(dv<=sim.farShown)body.push("inside the block impact zone")}
+  tip.innerHTML="<b></b><span></span>";tip.firstChild.textContent=title;tip.lastChild.textContent=body.join(" · ");
+  tip.style.display="block";tip.style.left=Math.max(8,Math.min(W-270,Xp+14))+"px";tip.style.top=Math.max(8,Yp-14-tip.offsetHeight)+"px";
+}
+const HINTS={inspect:"Drag to pan, scroll or pinch to zoom. Hover the map to read height, ash depth and lava thickness.",
+  vent:"Click on the volcano, within 6 km of the summit, to open the vent there instead."};
+function say(m){$("hint").textContent=m}
+function act(Xp,Yp){
+  if(tool==="inspect")return showTip(Xp,Yp);
+  if(sim.phase!=="idle")return say("Clear the map before moving the vent.");
+  const px=wx(Xp),py=wy(Yp),c=sim.cellAt(px,py);
+  if(Math.abs(px)>HALF||Math.abs(py)>HALF||sim.sea[c]||Math.hypot(px-sim.coneX,py-sim.coneY)>6000)return say("Too far from the volcano. Pick a spot within 6 km of the summit.");
+  sim.setVent(c);isoFc=isoLines(sim.fin);updateHud();
+  say("Vent moved to "+Math.round(sim.el[c]).toLocaleString("en-US")+" m, "+(Math.hypot(px-sim.coneX,py-sim.coneY)/1000).toFixed(1)+" km from the summit. The forecast is redrawn from there.");
+}
+
+// ---------- pointer: pan, pinch, click ----------
+const ptr=new Map();let moved=0,pinch=0,lastPtr=null;
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);ptr.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;
+  if(ptr.size===2){const [a,b]=[...ptr.values()];pinch=Math.hypot(a.x-b.x,a.y-b.y)}});
+cv.addEventListener("pointermove",e=>{
+  const p=ptr.get(e.pointerId);
+  if(!p){if(e.pointerType==="mouse"){lastPtr={x:e.clientX,y:e.clientY};showTip(e.clientX,e.clientY)}return}
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+  if(ptr.size===1){moved+=Math.abs(dx)+Math.abs(dy);if(moved>5){cam.x-=dx/cam.k;cam.y-=dy/cam.k;sDirty=true;cv.classList.add("drag");tip.style.display="none"}}
+  else if(ptr.size===2){const [a,b]=[...ptr.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch)zoom((a.x+b.x)/2,(a.y+b.y)/2,d/pinch);pinch=d;moved=99}});
+function up(e){if(ptr.has(e.pointerId)&&ptr.size===1&&moved<=5)act(e.clientX,e.clientY);ptr.delete(e.pointerId);pinch=0;cv.classList.remove("drag")}
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",e=>{ptr.delete(e.pointerId);pinch=0});
+cv.addEventListener("pointerleave",()=>{if(hoverR){hoverR=null;sDirty=true}lastPtr=null;tip.style.display="none"});
+function zoom(Xp,Yp,f){const px=wx(Xp),py=wy(Yp);cam.k=Math.max(.004,Math.min(.6,cam.k*f));cam.x=px-(Xp-W/2)/cam.k;cam.y=py-(Yp-H/2)/cam.k;sDirty=true}
+cv.addEventListener("wheel",e=>{e.preventDefault();zoom(e.clientX,e.clientY,Math.exp(-e.deltaY*.0015))},{passive:false});
+
+// ---------- controls ----------
+function group(ids,on){ids.forEach(id=>$(id).setAttribute("aria-pressed",id===on))}
+[["tInspect","inspect"],["tVent","vent"]].forEach(([id,t])=>$(id).onclick=()=>{tool=t;group(["tInspect","tVent"],id);say(HINTS[t])});
+[["sp0",0],["sp1",1],["sp4",4],["sp16",16],["sp64",64]].forEach(([id,v])=>$(id).onclick=()=>{speed=v;group(["sp0","sp1","sp4","sp16","sp64"],id);
+  say(v?"One second on screen is "+(v*SIMX>=3600?(v*SIMX/3600).toFixed(1)+" hours":v*SIMX/60+" minutes")+" of eruption.":"Paused.")});
+[["lRunny","runny"],["lSticky","sticky"]].forEach(([id,t])=>$(id).onclick=()=>{group(["lRunny","lSticky"],id);sim.lavaType=t;
+  say(t==="runny"?"Runny, basalt-like lava: thin sheets a few metres thick that can travel kilometres in a day.":"Sticky, andesite-like lava: flows tens of metres thick that creep a few hundred metres a day.")});
+$("vei").oninput=()=>{readControls();needBuild=true;const p=sim.params();
+  say("VEI "+sim.vei+": about "+(p.vol>=1e9?(p.vol/1e9).toFixed(1)+" km³":Math.round(p.vol/1e6*10)/10+" million m³")+" of ash and rock, thrown out over "+(p.D/3600).toFixed(1)+" hours.")};
+$("wind").oninput=$("wdir").oninput=()=>{readControls();needBuild=true;
+  say(sim.wind?"Wind at plume height carries the ash toward the "+COMPASS[+$("wdir").value]+". Coarse ash drops near the vent, fine ash rides on for hours.":"No wind: the ash falls in a ring around the vent.")};
+$("lava").oninput=()=>{readControls();say(sim.lavaQ?"Lava leaves the vent at "+sim.lavaQ+" m³/s for as long as the eruption runs.":"No lava: an explosive eruption only.")};
+$("bErupt").onclick=()=>{
+  if(sim.phase==="idle"){sim.erupt();hist=[];sampT=0;tip.style.display="none";
+    say("Explosive phase lasts "+(sim.D/3600).toFixed(1)+" hours. "+(sim.lavaQ?"Lava is slow: switch to 64× to follow it. It keeps coming until you stop the eruption (or day 30).":"With no lava, the eruption ends when the column does."))}
+  else if(sim.phase==="erupting")sim.stop();
+  lock();hudT=0};
+$("bReset").onclick=()=>{sim.reset();hist=[];isoNow=[];isoFc=isoLines(sim.fin);lock();hudT=0;say("Deposits cleared. Same volcano, back to the forecast.")};
+$("bNew").onclick=()=>{newCity(1000+Math.random()*9000|0);say("New volcano drawn. Same rules, different mountain, rivers and towns.")};
+addEventListener("keydown",e=>{if(e.code==="Space"&&e.target.tagName!=="BUTTON"&&e.target.tagName!=="INPUT"){e.preventDefault();$(speed?"sp0":"sp4").click()}});
+addEventListener("resize",()=>{resize()});
+
+resize();newCity(2026);
+if(matchMedia("(prefers-reduced-motion: reduce)").matches)$("sp0").click();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

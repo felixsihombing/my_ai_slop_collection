@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macet City Traffic</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* One visual world: a city seen at night from above. Asphalt blue-greys,
+   headlight white for moving traffic, brake-light red for jams, and the
+   green of Indonesian road signs for labels. Map fills the screen; a status
+   card sits top-left and a control dock sits bottom-centre. */
+:root{
+  color-scheme:dark;
+  --night:#0d1219;
+  --block:#141b25;
+  --panel:rgba(17,24,34,.92);
+  --line:#2b3747;
+  --ink:#e6edf3;
+  --muted:#8b9aac;
+  --sign:#1f8a5b;
+  --lamp:#f5b041;
+  --flow:#cfeaf5;
+  --slow:#f5b041;
+  --stop:#ff5a4d;
+  --display:"Barlow Condensed","Arial Narrow",sans-serif;
+  --body:"Barlow","Segoe UI",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--night);color:var(--ink);font-family:var(--body);font-size:14px;overflow:hidden;-webkit-user-select:none;user-select:none}
+#map{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#map.drag{cursor:grabbing}
+.card{position:absolute;background:var(--panel);border:1px solid var(--line);border-radius:10px;backdrop-filter:blur(6px)}
+#status{top:16px;left:16px;width:286px;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+h1{font-family:var(--display);font-weight:700;font-size:26px;line-height:1;margin:0;letter-spacing:.01em;text-wrap:balance}
+.sub{color:var(--muted);font-size:12px;margin-top:4px}
+.clock{font-family:var(--display);font-weight:600;font-size:30px;line-height:1;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:7px;font-family:var(--display);font-weight:600;font-size:15px;letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:4px;background:var(--sign);color:#fff;align-self:flex-start}
+.pill[data-l="1"]{background:#8a7a1f}
+.pill[data-l="2"]{background:#b0651c}
+.pill[data-l="3"]{background:#b3302a}
+.pill small{font-family:var(--body);font-weight:500;font-size:12px;letter-spacing:0;text-transform:none;opacity:.9}
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px 8px}
+.stat b{display:block;font-family:var(--display);font-weight:600;font-size:22px;line-height:1.05;font-variant-numeric:tabular-nums}
+.stat span{color:var(--muted);font-size:11.5px}
+#spark{width:100%;height:40px;display:block}
+.cap{display:flex;justify-content:space-between;color:var(--muted);font-size:11.5px;margin-top:-6px}
+.legend{display:flex;gap:14px;color:var(--muted);font-size:12px;flex-wrap:wrap}
+.legend i{display:inline-block;width:14px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+#dock{left:16px;right:16px;margin:0 auto;width:fit-content;bottom:16px;padding:10px 12px;display:flex;flex-direction:column;gap:8px;max-width:calc(100% - 32px)}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;justify-content:center}
+.seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+button{font:500 13px var(--body);color:var(--ink);background:transparent;border:0;padding:8px 11px;cursor:pointer;white-space:nowrap}
+.seg button+button{border-left:1px solid var(--line)}
+button:hover{background:rgba(255,255,255,.06)}
+button[aria-pressed="true"]{background:var(--lamp);color:#1b1405;font-weight:600}
+button.solo{border:1px solid var(--line);border-radius:7px}
+button:focus-visible,input:focus-visible{outline:2px solid var(--flow);outline-offset:2px}
+label.rng{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12.5px}
+input[type=range]{width:110px;accent-color:var(--lamp)}
+#hint{color:var(--muted);font-size:12.5px;text-align:center;min-height:1.3em}
+#tip{position:absolute;pointer-events:none;background:var(--sign);color:#fff;border-radius:5px;padding:6px 9px;font-size:12.5px;line-height:1.35;display:none;max-width:230px;box-shadow:0 4px 14px rgba(0,0,0,.45)}
+#tip b{font-family:var(--display);font-size:16px;font-weight:600;letter-spacing:.02em;display:block}
+#attr{position:absolute;right:12px;top:12px;color:var(--muted);font-size:11.5px;text-align:right;max-width:200px}
+@media (max-width:720px){
+  #status{width:auto;right:16px;padding:10px 12px;gap:8px}
+  #spark,.cap,.legend,#attr{display:none}
+  .stats{grid-template-columns:repeat(3,1fr)}
+  h1{font-size:21px}.clock{font-size:24px}
+  button{padding:8px 9px}
+  input[type=range]{width:80px}
+}
+</style>
+</head>
+<body>
+<canvas id="map" aria-label="Map of an invented city with live traffic"></canvas>
+
+<section class="card" id="status" aria-live="off">
+  <div class="head">
+    <div><h1 id="city">Kota</h1><div class="sub" id="seedline">Invented city</div></div>
+    <div class="clock" id="clock">07:40</div>
+  </div>
+  <div class="pill" id="pill" data-l="0"><span id="pillt">Lancar</span><small id="pills">flowing</small></div>
+  <div class="stats">
+    <div class="stat"><b id="sVeh">0</b><span>on the road</span></div>
+    <div class="stat"><b id="sSpd">0</b><span>km/h average</span></div>
+    <div class="stat"><b id="sStop">0%</b><span>standing still</span></div>
+    <div class="stat"><b id="sTrips">0</b><span>trips finished</span></div>
+    <div class="stat"><b id="sDelay">1.0×</b><span>trip time vs empty roads</span></div>
+    <div class="stat"><b id="sGave">0</b><span>gave up in a jam</span></div>
+  </div>
+  <canvas id="spark" width="508" height="80"></canvas>
+  <div class="cap"><span>Average speed, last few hours</span><span id="sparkMax">0–60 km/h</span></div>
+  <div class="legend"><span><i style="background:var(--flow)"></i>moving</span><span><i style="background:var(--slow)"></i>crawling</span><span><i style="background:var(--stop)"></i>stopped</span></div>
+</section>
+
+<div id="attr">Left-hand traffic. Motorcycles may not use the toll ring.</div>
+
+<section class="card" id="dock">
+  <div class="row">
+    <div class="seg" role="group" aria-label="Map tool">
+      <button id="tInspect" aria-pressed="true">Inspect</button>
+      <button id="tClose" aria-pressed="false">Close road</button>
+      <button id="tWiden" aria-pressed="false">Add lane</button>
+      <button id="tSignal" aria-pressed="false">Traffic light</button>
+    </div>
+    <div class="seg" role="group" aria-label="City conditions">
+      <button id="bRain" aria-pressed="false">Heavy rain</button>
+      <button id="bOdd" aria-pressed="false">Odd-even plates</button>
+    </div>
+  </div>
+  <div class="row">
+    <div class="seg" role="group" aria-label="Simulation speed">
+      <button id="sp0" aria-pressed="false">Pause</button>
+      <button id="sp1" aria-pressed="false">1×</button>
+      <button id="sp4" aria-pressed="true">4×</button>
+      <button id="sp16" aria-pressed="false">16×</button>
+    </div>
+    <label class="rng" for="demand">Demand <input type="range" id="demand" min="0.4" max="2" step="0.1" value="1"><span id="demandV">100%</span></label>
+    <button class="solo" id="bRush">Skip to rush hour</button>
+    <button class="solo" id="bNew">New city</button>
+  </div>
+  <div id="hint">Drag to pan, scroll or pinch to zoom. Hover a road to read it.</div>
+</section>
+<div id="tip"></div>
+
+<script id="sim">
+"use strict";
+const LANE_W=3.3, CLOCK=0.15, PEAK=20, MAXC=10000;
+const CLASS={
+  toll:{lanes:2,v:23,min:3.6,label:"Toll road"},
+  primary:{lanes:2,v:14,min:3.0,label:"Main road"},
+  secondary:{lanes:1,v:11,min:2.0,label:"Collector road"},
+  local:{lanes:1,v:8,min:1.2,label:"Neighbourhood street"},
+  ramp:{lanes:1,v:12,min:1.6,label:"Toll ramp"}
+};
+const STREETS=["Melati","Kenanga","Cempaka","Merdeka","Pahlawan","Anggrek","Mawar","Flamboyan","Kemuning","Cendana","Garuda","Rajawali","Merpati","Kutilang","Nusantara","Proklamasi","Veteran","Pemuda","Kartini","Gajah Mada","Hayam Wuruk","Teratai","Dahlia","Seruni","Wijaya Kusuma","Bangau","Elang","Pelita","Harapan","Damai","Kebon Sirih","Palem","Beringin","Mahoni"];
+const SYL_A=["Tirta","Wana","Giri","Sura","Marga","Bumi","Nusa","Jaya","Karta","Sindang"];
+const SYL_B=["maya","wangi","pura","laya","sari","raja","mulya","asri","loka","kencana"];
+
+function createSim(seed){
+  let s=seed>>>0;
+  const rnd=()=>{s=s+0x6D2B79F5|0;let t=Math.imul(s^s>>>15,1|s);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296};
+  const G=17,S=380,half=(G-1)*S/2;
+  const nodes=[],edges=[];let roads=[];
+  const name="Kota "+SYL_A[rnd()*SYL_A.length|0]+SYL_B[rnd()*SYL_B.length|0];
+  const ph=rnd()*6.28,amp=350+rnd()*450,slope=(rnd()-.5)*.5,off=(rnd()-.5)*1800;
+  const riverX=y=>Math.sin(y/1300+ph)*amp+y*slope+off;
+  const side=n=>n.x>riverX(n.y);
+  const pool=STREETS.slice();for(let i=pool.length-1;i>0;i--){const j=rnd()*(i+1)|0;[pool[i],pool[j]]=[pool[j],pool[i]]}
+  const lc=k=>k%4===0?"primary":k%2===0?"secondary":"local";
+
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){
+    const jit=(lc(i)==="primary"&&lc(j)==="primary")?50:95;
+    nodes.push({id:nodes.length,x:i*S-half+(rnd()-.5)*2*jit,y:j*S-half+(rnd()-.5)*2*jit,i,j,out:[],inn:[],sig:null,lat:true});
+  }
+  function addRoad(a,b,cls,nm){
+    const A=nodes[a],B=nodes[b],len=Math.hypot(B.x-A.x,B.y-A.y);
+    const r={id:roads.length,a,b,cls,name:nm,len,lanes:CLASS[cls].lanes,closed:false,bridge:side(A)!==side(B),e:[],lw:1};
+    roads.push(r);return r;
+  }
+  function lattice(a,b,k,nm){
+    const cls=lc(k),cross=side(nodes[a])!==side(nodes[b]);
+    if(cross){if(cls==="local")return;if(cls==="secondary"&&rnd()<.5)return}
+    else if(cls==="local"&&rnd()<.28)return;
+    addRoad(a,b,cls,nm);
+  }
+  for(let j=0;j<G;j++)for(let i=0;i<G;i++){
+    if(i<G-1)lattice(j*G+i,j*G+i+1,j,"Jl. "+pool[j]);
+    if(j<G-1)lattice(j*G+i,(j+1)*G+i,i,"Jl. "+pool[17+i]);
+  }
+  // elevated toll ring with ramps down to the street grid
+  const K=22,ring=[],rx=half*.66,ry=half*.56,rot=rnd()*.6;
+  for(let k=0;k<K;k++){const a=k/K*6.2832+rot;const n={id:nodes.length,x:Math.cos(a)*rx*(1+.06*Math.sin(a*3)),y:Math.sin(a)*ry,i:-1,j:-1,out:[],inn:[],sig:null,lat:false};nodes.push(n);ring.push(n.id)}
+  for(let k=0;k<K;k++)addRoad(ring[k],ring[(k+1)%K],"toll","Tol Lingkar Dalam");
+  for(let k=0;k<K;k+=3){
+    const T=nodes[ring[k]];let best=-1,bd=1e9;
+    for(const n of nodes){if(!n.lat||(lc(n.i)==="local"&&lc(n.j)==="local"))continue;const d=Math.hypot(n.x-T.x,n.y-T.y);if(d>120&&d<bd){bd=d;best=n.id}}
+    if(best>=0)addRoad(ring[k],best,"ramp","Toll ramp");
+  }
+  // keep only what is reachable from the centre
+  {const adj=nodes.map(()=>[]);for(const r of roads){adj[r.a].push(r.b);adj[r.b].push(r.a)}
+   const ok=new Uint8Array(nodes.length),st=[8*G+8];ok[st[0]]=1;
+   while(st.length){const n=st.pop();for(const m of adj[n])if(!ok[m]){ok[m]=1;st.push(m)}}
+   roads=roads.filter(r=>ok[r.a]&&ok[r.b]);roads.forEach((r,i)=>r.id=i)}
+  for(const r of roads)for(const [a,b] of [[r.a,r.b],[r.b,r.a]]){
+    const A=nodes[a],B=nodes[b];
+    const e={id:edges.length,a,b,road:r,len:r.len,ux:(B.x-A.x)/r.len,uy:(B.y-A.y)/r.len,vmax:CLASS[r.cls].v,cars:[],tail:new Float32Array(6).fill(1e9),spd:CLASS[r.cls].v,phase:0,toll:r.cls==="toll"||r.cls==="ramp"};
+    e.phase=Math.abs(e.ux)>Math.abs(e.uy)?0:1;edges.push(e);r.e.push(e);A.out.push(e);B.inn.push(e);
+  }
+  for(const n of nodes)if(n.lat&&lc(n.i)!=="local"&&lc(n.j)!=="local"&&n.inn.length>=3)n.sig={off:rnd()*60};
+
+  // where people live and where they work
+  const cbd=[{x:half*.1,y:-half*.05,r:1100,w:6},{x:-half*.45+rnd()*200,y:half*.4,r:700,w:3}];
+  const resC=[],jobC=[],mixC=[],ids=[];let ra=0,ja=0,ma=0;
+  for(const n of nodes){if(!n.lat||!n.out.length)continue;
+    let job=.15;for(const c of cbd){const d=Math.hypot(n.x-c.x,n.y-c.y)/c.r;job+=c.w*Math.exp(-d*d)}
+    const res=.3+Math.pow(Math.hypot(n.x,n.y)/half,1.3);
+    ids.push(n.id);ra+=res;ja+=job;ma+=res*.5+job*.5;resC.push(ra);jobC.push(ja);mixC.push(ma);n.job=job}
+  const pick=c=>{const u=rnd()*c[c.length-1];let lo=0,hi=c.length-1;while(lo<hi){const m=(lo+hi)>>1;if(c[m]<u)lo=m+1;else hi=m}return ids[lo]};
+  const parks=[];for(let t=0;t<14;t++){const i=rnd()*(G-1)|0,j=rnd()*(G-1)|0;if(Math.abs(i-8)+Math.abs(j-8)>3)parks.push([j*G+i,j*G+i+1,(j+1)*G+i+1,(j+1)*G+i])}
+
+  const N=nodes.length,gS=new Float64Array(N),came=new Int32Array(N),seen=new Int32Array(N),done=new Int32Array(N);let rs=0;const hp=[];
+  const hpush=(f,n)=>{let i=hp.length;hp.push([f,n]);while(i>0){const p=(i-1)>>1;if(hp[p][0]<=hp[i][0])break;const t=hp[p];hp[p]=hp[i];hp[i]=t;i=p}};
+  const hpop=()=>{const t=hp[0],l=hp.pop();if(hp.length){hp[0]=l;let i=0;for(;;){const a=2*i+1,b=a+1;let m=i;if(a<hp.length&&hp[a][0]<hp[m][0])m=a;if(b<hp.length&&hp[b][0]<hp[m][0])m=b;if(m===i)break;const x=hp[m];hp[m]=hp[i];hp[i]=x;i=m}}return t};
+  // fastest path by current speeds, so drivers steer around jams and closures
+  function route(from,to,moto){
+    rs++;hp.length=0;const T=nodes[to];gS[from]=0;seen[from]=rs;came[from]=-1;hpush(0,from);
+    while(hp.length){const n=hpop()[1];if(done[n]===rs)continue;done[n]=rs;if(n===to)break;
+      for(const e of nodes[n].out){if(e.road.closed||(moto&&e.toll))continue;const m=e.b;if(done[m]===rs)continue;
+        const g=gS[n]+e.len/Math.max(1.2,e.spd);
+        if(seen[m]!==rs||g<gS[m]){gS[m]=g;seen[m]=rs;came[m]=e.id;const M=nodes[m];hpush(g+Math.hypot(M.x-T.x,M.y-T.y)/23,m)}}}
+    if(done[to]!==rs)return null;const path=[];let n=to;while(came[n]!==-1){path.push(came[n]);n=edges[came[n]].a}return path.reverse();
+  }
+
+  const S_={nodes,edges,roads,parks,riverX,half,name,seed,G,
+    simT:0,clock:6.6*60,rain:false,oddEven:false,demand:1,count:0,trips:0,gaveUp:0,delay:1,stepN:0};
+  const gs=(h,m,w)=>Math.exp(-((h-m)/w)*((h-m)/w));
+  let spawnAcc=0,lastSpd=0;const last=[null,null,null,null,null,null];
+  function bestLane(e){const L=e.road.lanes;let b=0;for(let l=1;l<L;l++)if(e.tail[l]>e.tail[b])b=l;return b}
+  function spawn(){
+    if(S_.count>=MAXC)return;const h=S_.clock/60,am=gs(h,7.5,1.4)*.8,pm=gs(h,17.6,1.7)*.8,u=rnd();let o,d;
+    if(u<am){o=pick(resC);d=pick(jobC)}else if(u<am+pm){o=pick(jobC);d=pick(resC)}else{o=pick(mixC);d=pick(mixC)}
+    if(o===d)return;const moto=rnd()<(S_.rain?.38:.55);
+    if(S_.oddEven&&!moto&&rnd()<.35)return;
+    const r=route(o,d,moto);if(!r||!r.length)return;
+    const e=edges[r[0]],bl=bestLane(e),len=moto?2:(rnd()<.04?11:4.6);
+    if(e.tail[bl]<len+2)return;
+    let ff=0;for(const id of r)ff+=edges[id].len/edges[id].vmax;
+    e.cars.push({e,pos:0,v:Math.min(e.spd,6),lane:bl,len,vf:.85+rnd()*.3,route:r,ri:0,moto,wait:0,rr:0,lc:0,t0:S_.simT,ff,stamp:0,gone:false});
+    e.tail[bl]=-len;S_.count++;
+  }
+  function exitGap(e,c){
+    if(c.ri>=c.route.length-1)return 1e3;
+    let nx=edges[c.route[c.ri+1]];
+    if(nx.road.closed||(c.wait>50&&c.rr<S_.simT)){
+      c.rr=S_.simT+40;const dest=edges[c.route[c.route.length-1]].b;
+      const r=route(e.b,dest,c.moto);
+      if(r&&r.length){c.route=[e.id].concat(r);c.ri=0;nx=edges[r[0]]}
+      else if(nx.road.closed){c.gone=true;S_.count--;S_.gaveUp++;return 0}
+    }
+    if(c.wait>240){c.gone=true;S_.count--;S_.gaveUp++;return 0}
+    const nd=nodes[e.b];
+    if(nd.sig){const t=(S_.simT+nd.sig.off)%60;if(e.phase===0?t>=27:(t<30||t>=57))return 0}
+    const best=nx.tail[bestLane(nx)];
+    return best<c.len+2?0:Math.min(best,150);
+  }
+  function transfer(e,c){
+    if(c.ri>=c.route.length-1){c.gone=true;S_.count--;S_.trips++;
+      const ratio=Math.max(1,(S_.simT-c.t0)/Math.max(20,c.ff));S_.delay+=.02*(ratio-S_.delay);return}
+    const nx=edges[c.route[c.ri+1]];let bl=c.lane<nx.road.lanes&&nx.tail[c.lane]>c.len+12?c.lane:bestLane(nx);
+    if(nx.tail[bl]<c.len+2){c.pos=e.len-.01;c.v=0;return}
+    c.pos=Math.max(0,Math.min(c.pos-e.len,nx.tail[bl]-2));c.lane=bl;c.e=nx;c.ri++;nx.cars.push(c);nx.tail[bl]=c.pos-c.len;
+  }
+  function stepEdge(e,dt,wf,T){
+    const cars=e.cars,n=cars.length,L=e.road.lanes,tail=e.tail;
+    if(!n){for(let l=0;l<L;l++)tail[l]=1e9;return}
+    for(let i=1;i<n;i++){const c=cars[i];let k=i-1;while(k>=0&&cars[k].pos<c.pos){cars[k+1]=cars[k];k--}cars[k+1]=c}
+    for(let l=0;l<6;l++)last[l]=null;
+    let dirty=false;const vm=e.vmax*wf;
+    for(let i=0;i<n;i++){
+      const c=cars[i];if(c.lane>=L)c.lane=L-1;
+      if(c.stamp===S_.stepN){last[c.lane]=c;continue}
+      c.stamp=S_.stepN;
+      let lead=last[c.lane],gap;
+      if(lead)gap=lead.pos-lead.len-c.pos;
+      else{gap=e.len-c.pos+exitGap(e,c);if(c.gone){dirty=true;continue}}
+      if(L>1&&lead&&gap<14&&c.lc<=0){
+        const l2=c.lane===0?1:c.lane===L-1?L-2:c.lane+(rnd()<.5?1:-1),o=last[l2];let g2;
+        if(o)g2=o.pos-o.len-c.pos;else{g2=e.len-c.pos+exitGap(e,c);if(c.gone){dirty=true;continue}}
+        if(g2>gap+8){c.lane=l2;gap=g2;lead=o;c.lc=4}
+      }
+      c.lc-=dt;
+      let v=c.v+2.6*dt;const vd=vm*c.vf;if(v>vd)v=vd;const vs=(gap-2)/T;if(v>vs)v=vs;if(v<0)v=0;
+      c.v=v;c.pos+=v*dt;
+      if(v<.4)c.wait+=dt;else if(c.wait>0)c.wait=Math.max(0,c.wait-dt*4);
+      if(!lead&&c.pos>=e.len){transfer(e,c);if(c.e!==e||c.gone){dirty=true;continue}}
+      last[c.lane]=c;
+    }
+    for(let l=0;l<L;l++)tail[l]=last[l]?last[l].pos-last[l].len:1e9;
+    if(dirty){let w=0;for(let i=0;i<n;i++){const c=cars[i];if(c.e===e&&!c.gone)cars[w++]=c}cars.length=w}
+  }
+  S_.rate=()=>{const h=S_.clock/60;return(.06+.95*gs(h,7.5,1.4)+gs(h,17.6,1.7)+.3*gs(h,12.5,2.6)+.12*gs(h,20.5,1.5))*PEAK*S_.demand};
+  S_.step=dt=>{
+    S_.simT+=dt;S_.clock=(S_.clock+dt*CLOCK)%1440;S_.stepN++;
+    spawnAcc+=S_.rate()*dt;while(spawnAcc>=1){spawnAcc--;spawn()}
+    const wf=S_.rain?.72:1,T=S_.rain?1.9:1.5;
+    for(let i=0;i<edges.length;i++)stepEdge(edges[i],dt,wf,T);
+    if(S_.simT-lastSpd>2){lastSpd=S_.simT;for(const e of edges){let o=e.vmax*wf;const n=e.cars.length;if(n){let q=0;for(let i=0;i<n;i++)q+=e.cars[i].v;o=q/n}e.spd+=.35*(o-e.spd)}}
+  };
+  S_.stats=()=>{let n=0,v=0,st=0;for(const e of edges)for(const c of e.cars){n++;v+=c.v;if(c.v<.4)st++}
+    return{n,kmh:n?v/n*3.6:0,stopped:n?st/n:0}};
+  S_.toggleClose=r=>{r.closed=!r.closed};
+  S_.widen=r=>{if(r.lanes<4){r.lanes++;return true}return false};
+  S_.toggleSignal=n=>{n.sig=n.sig?null:{off:rnd()*60}};
+  return S_;
+}
+</script>
+
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+const cv=$("map"),ctx=cv.getContext("2d"),tip=$("tip");
+const COL={night:"#0d1219",block:"#141b25",river:"#12314a",park:"#15281f",
+  local:"#273342",secondary:"#334154",primary:"#45566b",ramp:"#5a5138",toll:"#73643c",tollEdge:"#0a0e14",
+  flow:"#cfeaf5",slow:"#f5b041",stop:"#ff5a4d",label:"#7f8ea1",sign:"#1f8a5b"};
+const ORDER=["local","secondary","primary","ramp","toll"];
+let sim,W=0,H=0,dpr=1,cam={x:0,y:0,k:.1},speed=4,tool="inspect",hover=null,hist=[];
+
+function newCity(seed){
+  sim=createSim(seed);hist=[];
+  $("city").textContent=sim.name;$("seedline").textContent="Invented city · plan no. "+seed;
+  sim.rain=$("bRain").getAttribute("aria-pressed")==="true";
+  sim.oddEven=$("bOdd").getAttribute("aria-pressed")==="true";
+  sim.demand=+$("demand").value;
+  for(let i=0;i<700;i++){sim.step(.4);if(i%30===0)sample()}   // open on a city that is already awake
+  fit();updateHud();
+}
+function fit(){const side=$("status").getBoundingClientRect();const wide=W>720;
+  const availW=wide?W-side.right-24:W,availH=wide?H-200:H-330;
+  cam.k=Math.min(availW,availH)/(sim.half*2.12);cam.x=wide?-(side.right/2)/cam.k:0;cam.y=(wide?85:30)/cam.k}
+function resize(){dpr=Math.min(2,window.devicePixelRatio||1);W=cv.clientWidth;H=cv.clientHeight;cv.width=W*dpr;cv.height=H*dpr}
+const sx=x=>(x-cam.x)*cam.k+W/2, sy=y=>(y-cam.y)*cam.k+H/2;
+const wx=x=>(x-W/2)/cam.k+cam.x, wy=y=>(y-H/2)/cam.k+cam.y;
+
+function draw(){
+  const k=cam.k,N=sim.nodes;
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.fillStyle=COL.night;ctx.fillRect(0,0,W,H);
+  // city footprint, parks, river
+  const h=sim.half+260;ctx.fillStyle=COL.block;ctx.beginPath();ctx.roundRect(sx(-h),sy(-h),2*h*k,2*h*k,60*k);ctx.fill();
+  ctx.fillStyle=COL.park;for(const p of sim.parks){ctx.beginPath();p.forEach((id,i)=>{const n=N[id];i?ctx.lineTo(sx(n.x),sy(n.y)):ctx.moveTo(sx(n.x),sy(n.y))});ctx.fill()}
+  ctx.strokeStyle=COL.river;ctx.lineWidth=Math.max(3,130*k);ctx.lineCap="round";ctx.lineJoin="round";ctx.beginPath();
+  for(let y=-h-600;y<=h+600;y+=120){const X=sx(sim.riverX(y)),Y=sy(y);y===-h-600?ctx.moveTo(X,Y):ctx.lineTo(X,Y)}ctx.stroke();
+  // roads
+  ctx.lineCap="round";
+  for(const cls of ORDER){const C=CLASS[cls];
+    for(const r of sim.roads){if(r.cls!==cls)continue;const A=N[r.a],B=N[r.b];
+      const x1=sx(A.x),y1=sy(A.y),x2=sx(B.x),y2=sy(B.y);
+      if((x1<-40&&x2<-40)||(x1>W+40&&x2>W+40)||(y1<-40&&y2<-40)||(y1>H+40&&y2>H+40)){r.vis=false;continue}
+      r.vis=true;r.lw=Math.max((r.lanes*2*LANE_W+1)*k,C.min*Math.sqrt(r.lanes/C.lanes));
+      if(cls==="toll"||cls==="ramp"||r.bridge){ctx.strokeStyle=COL.tollEdge;ctx.lineWidth=r.lw+Math.max(2,5*k);ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke()}
+      ctx.strokeStyle=r===hover?"#6f8198":COL[cls];ctx.lineWidth=r.lw;ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+      if(r.closed){ctx.strokeStyle=COL.stop;ctx.lineWidth=Math.max(2.5,r.lw*.45);ctx.setLineDash([6,7]);ctx.lineCap="butt";ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();ctx.setLineDash([]);ctx.lineCap="round"}
+    }}
+  // traffic lights
+  if(k>.07){for(const n of N){if(!n.sig)continue;const X=sx(n.x),Y=sy(n.y);if(X<-20||X>W+20||Y<-20||Y>H+20)continue;
+    const t=(sim.simT+n.sig.off)%60,rad=Math.max(1.6,Math.min(5,5*k));
+    for(const e of n.inn){const green=e.phase===0?t<27:(t>=30&&t<57),d=e.road.lw/2+rad+1;
+      ctx.fillStyle=green?"#3ddc84":COL.stop;ctx.beginPath();ctx.arc(X-e.ux*d+e.uy*e.road.lw/4,Y-e.uy*d-e.ux*e.road.lw/4,rad,0,6.3);ctx.fill()}}}
+  // vehicles: one stroke per colour and size
+  const P=[new Path2D,new Path2D,new Path2D,new Path2D,new Path2D,new Path2D];
+  for(const e of sim.edges){if(!e.road.vis||!e.cars.length)continue;
+    const A=N[e.a],r=e.road,lane=r.lw/(2*r.lanes),ax=sx(A.x),ay=sy(A.y),ux=e.ux,uy=e.uy;
+    for(const c of e.cars){const q=c.v/e.vmax,ci=q>.5?0:q>.1?1:2,o=(c.lane+.5)*lane,p=c.pos*k,l=Math.max(.01,c.len*k*.9);
+      const X=ax+ux*p+uy*o,Y=ay+uy*p-ux*o,path=P[ci*2+(c.moto?1:0)];path.moveTo(X,Y);path.lineTo(X-ux*l,Y-uy*l)}}
+  const wc=Math.max(1.9,2*k),wm=Math.max(1.3,.9*k),cols=[COL.flow,COL.slow,COL.stop];
+  for(let i=0;i<6;i++){ctx.strokeStyle=cols[i>>1];ctx.lineWidth=i&1?wm:wc;ctx.stroke(P[i])}
+  // street names, in the white-on-green of Indonesian road signs for the toll ring
+  if(k>.16){ctx.font="600 "+Math.min(15,Math.max(11,60*k))+"px 'Barlow Condensed',sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+    for(const r of sim.roads){if(!r.vis||r.cls==="local"||r.cls==="ramp"||r.id%4)continue;if(r.cls==="secondary"&&k<.3)continue;
+      const A=N[r.a],B=N[r.b];let a=Math.atan2(B.y-A.y,B.x-A.x);if(a>1.571||a<-1.571)a+=3.1416;
+      ctx.save();ctx.translate(sx((A.x+B.x)/2),sy((A.y+B.y)/2));ctx.rotate(a);
+      if(r.cls==="toll"){const w=ctx.measureText(r.name).width+10;ctx.fillStyle=COL.sign;ctx.fillRect(-w/2,-r.lw/2-18,w,16);ctx.fillStyle="#fff";ctx.fillText(r.name,0,-r.lw/2-9.5)}
+      else{ctx.fillStyle=COL.label;ctx.fillText(r.name,0,-r.lw/2-8)}
+      ctx.restore()}}
+}
+
+function sample(){const s=sim.stats();hist.push(s.kmh);if(hist.length>254)hist.shift();return s}
+function updateHud(){
+  const s=sim.stats(),c=sim.clock|0;
+  $("clock").textContent=String(c/60|0).padStart(2,"0")+":"+String(c%60).padStart(2,"0");
+  $("sVeh").textContent=s.n.toLocaleString("en-US");$("sSpd").textContent=s.kmh.toFixed(0);
+  $("sStop").textContent=(s.stopped*100).toFixed(0)+"%";$("sTrips").textContent=sim.trips.toLocaleString("en-US");
+  $("sDelay").textContent=sim.delay.toFixed(1)+"×";$("sGave").textContent=sim.gaveUp.toLocaleString("en-US");
+  const lv=!s.n||s.kmh>34?0:s.kmh>27?1:s.kmh>20?2:3;
+  $("pill").dataset.l=lv;$("pillt").textContent=["Lancar","Ramai lancar","Padat merayap","Macet total"][lv];
+  $("pills").textContent=["flowing","busy but moving","crawling","gridlock"][lv];
+  const sp=$("spark"),g=sp.getContext("2d"),w=sp.width,hh=sp.height;g.clearRect(0,0,w,hh);
+  g.strokeStyle="#2b3747";g.lineWidth=1;for(const v of [20,40]){const y=hh-4-v/60*(hh-8);g.beginPath();g.moveTo(0,y);g.lineTo(w,y);g.stroke()}
+  if(hist.length>1){const X=i=>i/253*(w-6),Y=v=>hh-4-Math.min(60,v)/60*(hh-8);
+    g.beginPath();hist.forEach((v,i)=>i?g.lineTo(X(i),Y(v)):g.moveTo(X(i),Y(v)));g.strokeStyle=COL.slow;g.lineWidth=2.5;g.stroke();
+    g.lineTo(X(hist.length-1),hh);g.lineTo(0,hh);g.closePath();g.fillStyle="rgba(245,176,65,.13)";g.fill();
+    g.fillStyle="#fff";g.beginPath();g.arc(X(hist.length-1),Y(hist[hist.length-1]),4,0,6.3);g.fill()}
+}
+
+let lastT=0,hudT=0,sampT=0;
+function frame(t){
+  const real=Math.min(.05,(t-lastT)/1000||0);lastT=t;
+  if(speed>0){let rem=real*speed;while(rem>1e-4){const d=Math.min(.34,rem);sim.step(d);rem-=d}
+    if(sim.simT-sampT>12){sampT=sim.simT;sample()}}
+  draw();
+  if(t-hudT>350){hudT=t;updateHud();if(hover&&lastPtr)showTip(hover,lastPtr.x,lastPtr.y)}
+  requestAnimationFrame(frame);
+}
+
+// ---- picking ----
+function nearestRoad(X,Y){let best=null,bd=Math.max(12,0)/cam.k;const px=wx(X),py=wy(Y);
+  for(const r of sim.roads){const A=sim.nodes[r.a],B=sim.nodes[r.b],dx=B.x-A.x,dy=B.y-A.y;
+    let u=((px-A.x)*dx+(py-A.y)*dy)/(r.len*r.len);u=u<0?0:u>1?1:u;
+    const d=Math.hypot(px-A.x-dx*u,py-A.y-dy*u)-r.lw/2/cam.k;if(d<bd){bd=d;best=r}}return best}
+function nearestNode(X,Y){let best=null,bd=22/cam.k;const px=wx(X),py=wy(Y);
+  for(const n of sim.nodes){if(!n.lat||n.inn.length<3)continue;const d=Math.hypot(px-n.x,py-n.y);if(d<bd){bd=d;best=n}}return best}
+function showTip(r,X,Y){
+  let n=0,v=0;for(const e of r.e)for(const c of e.cars){n++;v+=c.v}
+  const state=r.closed?"Closed to traffic":n?(v/n*3.6).toFixed(0)+" km/h now, limit "+(CLASS[r.cls].v*3.6).toFixed(0):"Empty, limit "+(CLASS[r.cls].v*3.6).toFixed(0)+" km/h";
+  tip.innerHTML="<b></b><span></span>";tip.firstChild.textContent=r.name;
+  tip.lastChild.textContent=CLASS[r.cls].label+(r.bridge?" (bridge)":"")+" · "+r.lanes+(r.lanes>1?" lanes":" lane")+" each way · "+n+" vehicles · "+state;
+  tip.style.display="block";tip.style.left=Math.min(W-240,X+14)+"px";tip.style.top=Math.max(8,Y-14-tip.offsetHeight)+"px";
+}
+const HINTS={inspect:"Drag to pan, scroll or pinch to zoom. Hover a road to read it.",
+  close:"Click a road to close it. Click again to reopen. Drivers reroute around it.",
+  widen:"Click a road to add one lane in each direction, up to four.",
+  signal:"Click a junction to add or remove its traffic light."};
+function say(m){$("hint").textContent=m}
+function act(X,Y){
+  if(tool==="signal"){const n=nearestNode(X,Y);if(!n)return say("No junction there. Click where three or more roads meet.");
+    sim.toggleSignal(n);return say(n.sig?"Traffic light installed.":"Traffic light removed. Drivers now take turns by gaps.")}
+  const r=nearestRoad(X,Y);if(!r)return say("No road there. Click closer to a road.");
+  if(tool==="close"){sim.toggleClose(r);say(r.name+(r.closed?" is closed.":" is open again."))}
+  else if(tool==="widen"){say(sim.widen(r)?r.name+" now has "+r.lanes+" lanes each way.":r.name+" is already at four lanes.")}
+  else showTip(r,X,Y);
+}
+
+// ---- pointer: pan, pinch, click ----
+const ptr=new Map();let moved=0,pinch=0,lastPtr=null;
+cv.addEventListener("pointerdown",e=>{cv.setPointerCapture(e.pointerId);ptr.set(e.pointerId,{x:e.clientX,y:e.clientY});moved=0;
+  if(ptr.size===2){const [a,b]=[...ptr.values()];pinch=Math.hypot(a.x-b.x,a.y-b.y)}});
+cv.addEventListener("pointermove",e=>{
+  const p=ptr.get(e.pointerId);
+  if(!p){if(e.pointerType==="mouse"){lastPtr={x:e.clientX,y:e.clientY};hover=nearestRoad(e.clientX,e.clientY);
+      if(hover)showTip(hover,e.clientX,e.clientY);else tip.style.display="none"}return}
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;
+  if(ptr.size===1){moved+=Math.abs(dx)+Math.abs(dy);if(moved>5){cam.x-=dx/cam.k;cam.y-=dy/cam.k;cv.classList.add("drag");tip.style.display="none"}}
+  else if(ptr.size===2){const [a,b]=[...ptr.values()],d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch)zoom((a.x+b.x)/2,(a.y+b.y)/2,d/pinch);pinch=d;moved=99}});
+function up(e){if(ptr.has(e.pointerId)&&ptr.size===1&&moved<=5)act(e.clientX,e.clientY);ptr.delete(e.pointerId);pinch=0;cv.classList.remove("drag")}
+cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",e=>{ptr.delete(e.pointerId);pinch=0});
+cv.addEventListener("pointerleave",()=>{hover=null;lastPtr=null;tip.style.display="none"});
+function zoom(X,Y,f){const px=wx(X),py=wy(Y);cam.k=Math.max(.03,Math.min(6,cam.k*f));cam.x=px-(X-W/2)/cam.k;cam.y=py-(Y-H/2)/cam.k}
+cv.addEventListener("wheel",e=>{e.preventDefault();zoom(e.clientX,e.clientY,Math.exp(-e.deltaY*.0015))},{passive:false});
+
+// ---- controls ----
+function group(ids,on){ids.forEach(id=>$(id).setAttribute("aria-pressed",id===on))}
+[["tInspect","inspect"],["tClose","close"],["tWiden","widen"],["tSignal","signal"]].forEach(([id,t])=>$(id).onclick=()=>{tool=t;group(["tInspect","tClose","tWiden","tSignal"],id);say(HINTS[t])});
+[["sp0",0],["sp1",1],["sp4",4],["sp16",16]].forEach(([id,v])=>$(id).onclick=()=>{speed=v;group(["sp0","sp1","sp4","sp16"],id)});
+function toggle(id,fn,on,offm){$(id).onclick=()=>{const v=$(id).getAttribute("aria-pressed")!=="true";$(id).setAttribute("aria-pressed",v);fn(v);say(v?on:offm)}}
+toggle("bRain",v=>sim.rain=v,"Rain: everyone drives slower and leaves longer gaps. Some riders switch to cars.","Rain has stopped.");
+toggle("bOdd",v=>sim.oddEven=v,"Odd-even plates: about a third of car trips stay home. Motorcycles are exempt.","Odd-even rule lifted.");
+$("demand").oninput=e=>{sim.demand=+e.target.value;$("demandV").textContent=Math.round(e.target.value*100)+"%"};
+$("bRush").onclick=()=>{const h=sim.clock/60;sim.clock=(h>=6.5&&h<16)?16*60:6.5*60;say("Clock moved to "+(sim.clock===960?"16:00, before the evening peak.":"06:30, before the morning peak."))};
+$("bNew").onclick=()=>{newCity(1000+Math.random()*9000|0);say("New city drawn. Same rules, different streets.")};
+addEventListener("keydown",e=>{if(e.code==="Space"&&e.target.tagName!=="BUTTON"&&e.target.tagName!=="INPUT"){e.preventDefault();$(speed?"sp0":"sp4").click()}});
+addEventListener("resize",()=>{resize()});
+
+resize();newCity(2026);
+if(matchMedia("(prefers-reduced-motion: reduce)").matches)$("sp0").click();
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

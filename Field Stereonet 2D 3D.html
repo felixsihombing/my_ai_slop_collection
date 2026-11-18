@@ -1,0 +1,710 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Field Stereonet</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Public+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: net on the left as the working surface, a narrow field-book panel on the right; stacks on phones. */
+:root {
+  --bg: #f3f4f1;
+  --panel: #ffffff;
+  --ink: #1d2320;
+  --muted: #5e6862;
+  --line: #d6dbd6;
+  --grid: #c3cac4;
+  --plane: #1f5aa6;
+  --line-c: #b4471c;
+  --accent: #2f6b4f;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #151917; --panel: #1d2220; --ink: #e5e9e6; --muted: #9aa49e;
+    --line: #313834; --grid: #3c4540; --plane: #6ea3ea; --line-c: #ef8a5c; --accent: #6cbc93;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #151917; --panel: #1d2220; --ink: #e5e9e6; --muted: #9aa49e;
+  --line: #313834; --grid: #3c4540; --plane: #6ea3ea; --line-c: #ef8a5c; --accent: #6cbc93;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 40px;
+}
+.wrap { max-width: 1080px; margin: 0 auto; display: grid; gap: 20px; }
+header h1 { margin: 0; font-size: 1.6rem; font-weight: 700; letter-spacing: -0.01em; text-wrap: balance; }
+header p { margin: 4px 0 0; color: var(--muted); max-width: 65ch; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 20px; align-items: start; }
+@media (max-width: 820px) { .main { grid-template-columns: 1fr; } }
+
+.netbox { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; min-width: 0; }
+.netbox svg { width: 100%; height: auto; display: block; max-width: 560px; margin: 0 auto; touch-action: none; }
+.readout { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 10px;
+  font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.readout b { color: var(--ink); font-weight: 500; }
+
+.opts { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 0.88rem; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { border: 0; background: transparent; color: var(--muted); font: inherit; padding: 5px 10px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--panel); }
+.opts label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+
+.side { display: grid; gap: 16px; min-width: 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: grid; gap: 10px; }
+.card h2 { margin: 0; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+select, textarea {
+  width: 100%; font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px;
+}
+textarea { font-family: var(--font-mono); font-size: 0.88rem; min-height: 92px; resize: vertical; }
+.hint { font-size: 0.8rem; color: var(--muted); margin: 0; }
+.err { font-size: 0.8rem; color: var(--line-c); margin: 0; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.btn { font: inherit; font-weight: 600; font-size: 0.88rem; border-radius: 6px; padding: 7px 14px; cursor: pointer;
+  border: 1px solid var(--accent); background: var(--accent); color: var(--panel); }
+.btn.ghost { background: transparent; color: var(--ink); border-color: var(--line); font-weight: 500; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.list { list-style: none; margin: 0; padding: 0; max-height: 300px; overflow-y: auto; border-top: 1px solid var(--line); }
+.list li { display: grid; grid-template-columns: 54px 1fr auto; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.list li.hl { background: color-mix(in srgb, var(--accent) 10%, transparent); }
+.tag { font-family: var(--font-body); font-size: 0.7rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
+.tag.p { color: var(--plane); } .tag.l { color: var(--line-c); }
+.del { border: 0; background: transparent; color: var(--muted); cursor: pointer; font-size: 1rem; padding: 2px 6px; border-radius: 4px; }
+.del:hover { color: var(--line-c); }
+.empty { color: var(--muted); font-size: 0.88rem; padding: 8px 0; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 0.8rem; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 6px; }
+
+/* SVG */
+.prim { fill: var(--panel); stroke: var(--ink); stroke-width: 1.4; }
+.grid { fill: none; stroke: var(--grid); stroke-width: 0.6; }
+.grid.major { stroke-width: 1; }
+.lab { fill: var(--muted); font-family: var(--font-body); font-size: 13px; font-weight: 600; text-anchor: middle; dominant-baseline: middle; }
+.gc { fill: none; stroke: var(--plane); stroke-width: 1.6; }
+.pole { fill: var(--plane); stroke: var(--panel); stroke-width: 1; }
+.lin { fill: var(--line-c); stroke: var(--panel); stroke-width: 1; }
+.hl-mark { stroke: var(--ink) !important; stroke-width: 2.4 !important; }
+.cross { stroke: var(--ink); stroke-width: 1; }
+
+/* 3D hemisphere view */
+.viewbar { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 12px; }
+.netbox canvas { width: 100%; max-width: 560px; aspect-ratio: 1; display: block; margin: 0 auto; touch-action: none; cursor: grab; }
+.netbox canvas.grabbing { cursor: grabbing; }
+.netbox svg[hidden], .netbox canvas[hidden] { display: none; }
+.seg button:disabled { opacity: 0.4; cursor: not-allowed; }
+.seg button:not([aria-pressed]):hover { color: var(--ink); }
+
+/* Best-fit planes from X,Y,Z points: accent colour + dashed so they never read as a measured plane */
+.gc.fit { stroke: var(--accent); stroke-dasharray: 7 4; stroke-width: 1.8; }
+.fpole { fill: var(--accent); stroke: var(--panel); stroke-width: 1; }
+.tag.f { color: var(--accent); }
+.list li small { display: block; color: var(--muted); font-size: 0.74rem; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer; }
+.fitres { margin: 0; padding: 10px 12px; border-radius: 6px; font-size: 0.82rem; line-height: 1.45;
+  background: color-mix(in srgb, var(--accent) 9%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.fitres b { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.fitres .warn { color: var(--line-c); display: block; margin-top: 4px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Field Stereonet</h1>
+    <p>Lower-hemisphere projection for planes and lines. Paste measurements, switch between Schmidt and Wulff nets, and hover the net to read trend and plunge. Switch to 3D to rotate the hemisphere and see each plane as a disc through its centre.</p>
+  </header>
+
+  <div class="main">
+    <section class="netbox" aria-label="Stereonet">
+      <div class="viewbar">
+        <div class="seg" role="group" aria-label="View">
+          <button id="view2d" aria-pressed="true">2D net</button>
+          <button id="view3d" aria-pressed="false">3D hemisphere</button>
+        </div>
+        <div class="seg" id="camBtns" role="group" aria-label="3D camera" hidden>
+          <button id="camTop">Top</button>
+          <button id="camSide">Side</button>
+          <button id="camReset">Reset</button>
+        </div>
+      </div>
+      <svg id="net" viewBox="0 0 520 520" role="img" aria-label="Stereonet plot"></svg>
+      <canvas id="net3d" hidden aria-label="3D lower-hemisphere view. Drag to rotate."></canvas>
+      <div class="readout">
+        <span id="cursor">Cursor: <b>—</b></span>
+        <span id="counts"></span>
+      </div>
+      <div class="opts">
+        <div class="seg" role="group" aria-label="Net type">
+          <button id="netArea" aria-pressed="true">Equal-area (Schmidt)</button>
+          <button id="netAngle" aria-pressed="false">Equal-angle (Wulff)</button>
+        </div>
+        <label><input type="checkbox" id="optGrid" checked> Grid</label>
+        <label><input type="checkbox" id="optGC" checked> Great circles</label>
+        <label><input type="checkbox" id="optPoles" checked> Poles</label>
+      </div>
+    </section>
+
+    <aside class="side">
+      <div class="card">
+        <h2>Add measurements</h2>
+        <select id="mode" aria-label="Measurement format">
+          <option value="dipdd">Plane — dip / dip direction</option>
+          <option value="rhr">Plane — strike / dip (right-hand rule)</option>
+          <option value="line">Line — plunge / trend</option>
+          <option value="xyz">Points — X, Y, Z (fit a plane)</option>
+        </select>
+        <textarea id="input" placeholder="45/120&#10;30/095&#10;62 270"></textarea>
+        <p class="hint" id="hint">One per line, e.g. 45/120. Slash, comma or space all work.</p>
+        <label class="chk" id="depthWrap" hidden><input type="checkbox" id="zDepth"> Z is depth (positive down), not elevation</label>
+        <p class="err" id="err" hidden></p>
+        <div class="row">
+          <button class="btn" id="add">Add to net</button>
+        </div>
+        <p class="fitres" id="fitres" hidden></p>
+      </div>
+
+      <div class="card">
+        <h2>Data</h2>
+        <div class="legend">
+          <span><svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--plane)" stroke-width="2"/></svg>Plane</span>
+          <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="var(--plane)"/></svg>Pole</span>
+          <span><svg width="12" height="10"><polygon points="6,0 12,10 0,10" fill="var(--line-c)"/></svg>Line</span>
+          <span><svg width="22" height="10"><line x1="0" y1="5" x2="22" y2="5" stroke="var(--accent)" stroke-width="2" stroke-dasharray="5 3"/></svg>Fitted plane</span>
+        </div>
+        <ul class="list" id="list"></ul>
+        <div class="row">
+          <button class="btn ghost" id="copy">Copy as CSV</button>
+          <button class="btn ghost" id="clear">Clear all</button>
+        </div>
+        <p class="hint" id="copyMsg" hidden></p>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  const NS = "http://www.w3.org/2000/svg";
+  const R = 230, C = 260;
+  const rad = d => d * Math.PI / 180, deg = r => r * 180 / Math.PI;
+  const norm360 = a => ((a % 360) + 360) % 360;
+
+  // Example data: a gently south-plunging fold (bedding on both limbs + measured fold axis)
+  let data = [
+    { kind: "plane", dip: 35, dd: 95 },
+    { kind: "plane", dip: 48, dd: 112 },
+    { kind: "plane", dip: 42, dd: 255 },
+    { kind: "plane", dip: 55, dd: 272 },
+    { kind: "plane", dip: 20, dd: 175 },
+    { kind: "line",  plunge: 18, trend: 182 },
+  ];
+  let net = "area";
+  let hl = -1;
+
+  const svg = document.getElementById("net");
+  const el = (tag, attrs, parent) => { const e = document.createElementNS(NS, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); (parent || svg).appendChild(e); return e; };
+
+  // --- projection ---------------------------------------------------------
+  function proj(trend, plunge) {
+    const t = rad(trend), half = rad(90 - plunge) / 2;
+    const r = net === "area" ? R * Math.SQRT2 * Math.sin(half) : R * Math.tan(half);
+    return [C + r * Math.sin(t), C - r * Math.cos(t)];
+  }
+  function unproj(x, y) {
+    const dx = x - C, dy = C - y, r = Math.hypot(dx, dy);
+    if (r > R) return null;
+    const half = net === "area" ? Math.asin(Math.min(1, r / (R * Math.SQRT2))) : Math.atan(r / R);
+    return { trend: norm360(deg(Math.atan2(dx, dy))), plunge: 90 - deg(2 * half) };
+  }
+  // vector (east, north, down) -> lower-hemisphere trend/plunge
+  function vecTP(e, n, d) {
+    if (d < 0) { e = -e; n = -n; d = -d; }
+    const L = Math.hypot(e, n, d);
+    return [norm360(deg(Math.atan2(e, n))), deg(Math.asin(Math.min(1, d / L)))];
+  }
+  function pathFrom(pts) { return pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(2) + " " + p[1].toFixed(2)).join(""); }
+
+  function greatCircle(dip, dd) {
+    const sAz = rad(dd - 90), dAz = rad(dd), D = rad(dip);
+    const s = [Math.sin(sAz), Math.cos(sAz), 0];
+    const v = [Math.sin(dAz) * Math.cos(D), Math.cos(dAz) * Math.cos(D), Math.sin(D)];
+    const pts = [];
+    for (let th = 0; th <= 180; th += 2) {
+      const c = Math.cos(rad(th)), sn = Math.sin(rad(th));
+      const [t, p] = vecTP(c * s[0] + sn * v[0], c * s[1] + sn * v[1], c * s[2] + sn * v[2]);
+      pts.push(proj(t, p));
+    }
+    return pathFrom(pts);
+  }
+  function smallCircleNS(alpha) {
+    const a = rad(alpha), pts = [];
+    for (let ph = 0; ph <= 180; ph += 3) {
+      const f = rad(ph);
+      const [t, p] = vecTP(Math.sin(a) * Math.cos(f), Math.cos(a), Math.sin(a) * Math.sin(f));
+      pts.push(proj(t, p));
+    }
+    return pathFrom(pts);
+  }
+
+  // --- best-fit plane from X,Y,Z points -------------------------------------
+  // Eigen-decomposition of a symmetric 3x3 matrix by cyclic Jacobi rotations.
+  // Returns eigenvalues and the matching unit eigenvectors (as columns of vecs).
+  function eigSym3(A) {
+    const a = A.map(r => r.slice());
+    const V = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+    const scale = Math.abs(a[0][0]) + Math.abs(a[1][1]) + Math.abs(a[2][2]) || 1;
+    for (let sweep = 0; sweep < 60; sweep++) {
+      const off = Math.abs(a[0][1]) + Math.abs(a[0][2]) + Math.abs(a[1][2]);
+      if (off < 1e-15 * scale) break;
+      for (const [p, q] of [[0, 1], [0, 2], [1, 2]]) {
+        if (a[p][q] === 0) continue;
+        const theta = (a[q][q] - a[p][p]) / (2 * a[p][q]);
+        const t = (theta >= 0 ? 1 : -1) / (Math.abs(theta) + Math.sqrt(theta * theta + 1));
+        const c = 1 / Math.sqrt(t * t + 1), s = t * c;
+        for (let k = 0; k < 3; k++) { const kp = a[k][p], kq = a[k][q]; a[k][p] = c * kp - s * kq; a[k][q] = s * kp + c * kq; }
+        for (let k = 0; k < 3; k++) { const pk = a[p][k], qk = a[q][k]; a[p][k] = c * pk - s * qk; a[q][k] = s * pk + c * qk; }
+        for (let k = 0; k < 3; k++) { const kp = V[k][p], kq = V[k][q]; V[k][p] = c * kp - s * kq; V[k][q] = s * kp + c * kq; }
+      }
+    }
+    return [0, 1, 2].map(i => ({ val: a[i][i], vec: [V[0][i], V[1][i], V[2][i]] }));
+  }
+
+  // Orthogonal (total) least-squares plane: the normal is the direction of least
+  // spread of the centred points, i.e. the eigenvector of the smallest eigenvalue
+  // of their covariance matrix. Residuals are perpendicular distances to the plane.
+  function fitPlane(pts, zIsDepth) {
+    const n = pts.length;
+    const P = pts.map(p => [p.x, p.y, zIsDepth ? -p.z : p.z]); // east, north, up
+    const m = [0, 1, 2].map(k => P.reduce((s, p) => s + p[k], 0) / n);
+    const Q = P.map(p => [p[0] - m[0], p[1] - m[1], p[2] - m[2]]); // centring keeps UTM-sized numbers precise
+    const C = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    Q.forEach(q => { for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) C[i][j] += q[i] * q[j] / n; });
+    const eig = eigSym3(C).sort((u, v) => v.val - u.val); // largest first
+    const [l1, l2, l3] = eig.map(e => Math.max(0, e.val));
+    if (l1 === 0) return { error: "All points are identical." };
+    if (l2 < 1e-10 * l1) return { error: "The points lie on (or very near) a single line, so no plane is defined. Add a point off that line." };
+    let [ne, nn, nu] = eig[2].vec;
+    if (nu < 0) { ne = -ne; nn = -nn; nu = -nu; } // upward normal leans toward the dip direction
+    const h = Math.hypot(ne, nn);
+    const dip = deg(Math.atan2(h, nu));
+    const dd = h < 1e-12 ? 0 : norm360(deg(Math.atan2(ne, nn)));
+    const res = Q.map(q => q[0] * ne + q[1] * nn + q[2] * nu);
+    let maxIdx = 0; res.forEach((r, i) => { if (Math.abs(r) > Math.abs(res[maxIdx])) maxIdx = i; });
+    return { dip, dd, n, rms: Math.sqrt(l3), maxRes: Math.abs(res[maxIdx]), maxIdx, spread: Math.sqrt(l2), zIsDepth };
+  }
+
+  // --- draw ---------------------------------------------------------------
+  function draw() {
+    svg.textContent = "";
+    el("circle", { cx: C, cy: C, r: R, class: "prim" });
+    const showGrid = document.getElementById("optGrid").checked;
+    if (showGrid) {
+      const g = el("g", { "clip-path": "none" });
+      for (let d = 10; d <= 80; d += 10) {
+        const cls = d % 30 === 0 ? "grid major" : "grid";
+        el("path", { d: greatCircle(d, 90), class: cls }, g);
+        el("path", { d: greatCircle(d, 270), class: cls }, g);
+      }
+      for (let a = 10; a <= 170; a += 10) {
+        el("path", { d: smallCircleNS(a), class: a % 30 === 0 ? "grid major" : "grid" }, g);
+      }
+      el("line", { x1: C, y1: C - R, x2: C, y2: C + R, class: "grid major" }, g);
+      el("line", { x1: C - R, y1: C, x2: C + R, y2: C, class: "grid major" }, g);
+    }
+    // ticks every 10°
+    for (let a = 0; a < 360; a += 10) {
+      const t = rad(a), len = a % 90 === 0 ? 10 : 5;
+      el("line", { x1: C + R * Math.sin(t), y1: C - R * Math.cos(t), x2: C + (R + len) * Math.sin(t), y2: C - (R + len) * Math.cos(t), class: "cross" });
+    }
+    [["N", 0], ["E", 90], ["S", 180], ["W", 270]].forEach(([l, a]) => {
+      const t = rad(a); const tx = el("text", { x: C + (R + 20) * Math.sin(t), y: C - (R + 20) * Math.cos(t), class: "lab" }); tx.textContent = l;
+    });
+    el("line", { x1: C - 6, y1: C, x2: C + 6, y2: C, class: "cross" });
+    el("line", { x1: C, y1: C - 6, x2: C, y2: C + 6, class: "cross" });
+
+    const showGC = document.getElementById("optGC").checked;
+    const showPoles = document.getElementById("optPoles").checked;
+    data.forEach((m, i) => {
+      const hc = i === hl ? " hl-mark" : "";
+      if (m.kind === "plane") {
+        if (showGC) el("path", { d: greatCircle(m.dip, m.dd), class: (m.fit ? "gc fit" : "gc") + hc });
+        if (showPoles) {
+          const [x, y] = proj(norm360(m.dd + 180), 90 - m.dip);
+          if (m.fit) el("rect", { x: x - 4.5, y: y - 4.5, width: 9, height: 9, transform: `rotate(45 ${x} ${y})`, class: "fpole" + hc });
+          else el("circle", { cx: x, cy: y, r: 4.5, class: "pole" + hc });
+        }
+      } else {
+        const [x, y] = proj(m.trend, m.plunge);
+        el("polygon", { points: `${x},${y - 6.5} ${x + 6},${y + 4} ${x - 6},${y + 4}`, class: "lin" + hc });
+      }
+    });
+    renderList();
+    if (view === "3d") req3D();
+  }
+
+  // --- list ---------------------------------------------------------------
+  const pad = (n, w) => String(Math.round(n)).padStart(w, "0");
+  const az = a => pad(norm360(Math.round(a)), 3); // keeps 359.7 from printing as 360
+  const sig = v => v === 0 ? "0" : Number(v.toPrecision(3)).toString();
+  function label(m) {
+    if (m.kind === "plane") return `${pad(m.dip, 2)}/${az(m.dd)}  str ${az(m.dd - 90)}`;
+    return `${pad(m.plunge, 2)}→${pad(m.trend, 3)}`;
+  }
+  function renderList() {
+    const ul = document.getElementById("list");
+    ul.textContent = "";
+    if (!data.length) { const li = document.createElement("li"); li.className = "empty"; li.style.display = "block"; li.textContent = "No measurements yet. Add some above."; ul.appendChild(li); }
+    data.forEach((m, i) => {
+      const li = document.createElement("li");
+      if (i === hl) li.className = "hl";
+      if (m.fit) {
+        const f = m.fit;
+        li.innerHTML = `<span class="tag f">fit</span><span>${label(m)}<small>${f.n} pts · ${f.n === 3 ? "exact 3-point" : "RMS " + sig(f.rms)}</small></span>`;
+      } else {
+        li.innerHTML = `<span class="tag ${m.kind === "plane" ? "p" : "l"}">${m.kind}</span><span>${label(m)}</span>`;
+      }
+      const b = document.createElement("button"); b.className = "del"; b.setAttribute("aria-label", "Remove " + label(m)); b.textContent = "×";
+      b.onclick = () => { data.splice(i, 1); hl = -1; draw(); };
+      li.appendChild(b);
+      li.onmouseenter = () => { hl = i; draw(); };
+      li.onmouseleave = () => { hl = -1; draw(); };
+      ul.appendChild(li);
+    });
+    const np = data.filter(m => m.kind === "plane").length;
+    document.getElementById("counts").textContent = `${np} plane${np === 1 ? "" : "s"} · ${data.length - np} line${data.length - np === 1 ? "" : "s"}`;
+  }
+
+  // --- input --------------------------------------------------------------
+  const hints = {
+    dipdd: "One per line as dip/dip direction, e.g. 45/120.",
+    rhr: "One per line as strike/dip, dip to the right of strike, e.g. 030/45.",
+    line: "One per line as plunge/trend, e.g. 20/185.",
+    xyz: "One point per line as X Y Z (easting, northing, elevation), with an optional ID first. Three points give the exact plane; four or more give a least-squares best fit. A header row is skipped.",
+  };
+  const placeholders = {
+    dipdd: "45/120\n30/095\n62 270",
+    rhr: "030/45\n005/30\n180 62",
+    line: "20/185\n15 170",
+    xyz: "DH01  512340  9312870  245.0\nDH02  512410  9312905  238.5\nDH03  512385  9312790  251.2\nDH04  512460  9312830  240.9",
+  };
+  const modeSel = document.getElementById("mode");
+  const inputEl = document.getElementById("input");
+  modeSel.onchange = () => {
+    const v = modeSel.value;
+    document.getElementById("hint").textContent = hints[v];
+    inputEl.placeholder = placeholders[v];
+    document.getElementById("depthWrap").hidden = v !== "xyz";
+  };
+
+  const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  // Parse X,Y,Z rows. Accepts "x y z" or "id x y z"; skips a header row of words.
+  function parseXYZ(lines) {
+    const pts = [], bad = [];
+    lines.forEach((s, idx) => {
+      const tok = s.split(/[,;\s]+/).filter(Boolean);
+      if (idx === 0 && tok.every(t => isNaN(Number(t)))) return; // header such as "ID,X,Y,Z"
+      let id = null, nums = tok;
+      if (tok.length === 4 && isNaN(Number(tok[0]))) { id = tok[0]; nums = tok.slice(1); }
+      const v = nums.map(Number);
+      if (v.length !== 3 || v.some(x => !isFinite(x))) { bad.push(`line ${idx + 1} "${s}"`); return; }
+      pts.push({ id: id || `line ${idx + 1}`, x: v[0], y: v[1], z: v[2] });
+    });
+    return { pts, bad };
+  }
+
+  function showFit(f, pts) {
+    const box = document.getElementById("fitres");
+    const s = norm360(f.dd - 90);
+    let html = `${f.n === 3 ? "Three-point plane" : "Best-fit plane"} <b>${f.dip.toFixed(1)}/${norm360(f.dd).toFixed(1)}</b> (strike <b>${s.toFixed(1)}</b>, RHR) from ${f.n} points.`;
+    if (f.n === 3) {
+      html += " Three points define the plane exactly, so there is no misfit to report. Add a fourth point to check it.";
+    } else {
+      html += ` RMS misfit <b>${sig(f.rms)}</b>; largest residual <b>${sig(f.maxRes)}</b> at ${esc(pts[f.maxIdx].id)} (perpendicular distance, in your coordinate units).`;
+      if (f.rms > 0.1 * f.spread) html += `<span class="warn">The points scatter widely about this plane relative to their spread. Check ${esc(pts[f.maxIdx].id)} for a typo or outlier, or the surface may not be planar.</span>`;
+    }
+    if (f.dip < 1) html += `<span class="warn">The plane is near-horizontal, so its dip direction is poorly constrained.</span>`;
+    box.innerHTML = html;
+    box.hidden = false;
+  }
+
+  document.getElementById("add").onclick = () => {
+    const err = document.getElementById("err");
+    const lines = inputEl.value.split(/\n/).map(s => s.trim()).filter(Boolean);
+    if (modeSel.value === "xyz") {
+      if (!lines.length) { err.hidden = false; err.textContent = "Type at least three X Y Z points first."; return; }
+      const { pts, bad } = parseXYZ(lines);
+      if (bad.length) { err.hidden = false; err.textContent = "Not added — each row needs X Y Z (or ID X Y Z). Fix " + bad.join("; ") + "."; return; }
+      if (pts.length < 3) { err.hidden = false; err.textContent = `A plane needs at least 3 points; you gave ${pts.length}.`; return; }
+      const f = fitPlane(pts, document.getElementById("zDepth").checked);
+      if (f.error) { err.hidden = false; err.textContent = f.error; return; }
+      err.hidden = true;
+      data.push({ kind: "plane", dip: f.dip, dd: f.dd, fit: f });
+      inputEl.value = "";
+      showFit(f, pts);
+      draw();
+      return;
+    }
+    const bad = [], add = [];
+    lines.forEach((s, idx) => {
+      const nums = s.split(/[\/,;\s]+/).filter(Boolean).map(Number);
+      if (nums.length !== 2 || nums.some(isNaN)) { bad.push(`line ${idx + 1} "${s}"`); return; }
+      const [a, b] = nums, mode = modeSel.value;
+      if (mode === "dipdd") {
+        if (a < 0 || a > 90 || b < 0 || b > 360) return bad.push(`line ${idx + 1}: dip 0–90, direction 0–360`);
+        add.push({ kind: "plane", dip: a, dd: norm360(b) });
+      } else if (mode === "rhr") {
+        if (a < 0 || a > 360 || b < 0 || b > 90) return bad.push(`line ${idx + 1}: strike 0–360, dip 0–90`);
+        add.push({ kind: "plane", dip: b, dd: norm360(a + 90) });
+      } else {
+        if (a < 0 || a > 90 || b < 0 || b > 360) return bad.push(`line ${idx + 1}: plunge 0–90, trend 0–360`);
+        add.push({ kind: "line", plunge: a, trend: norm360(b) });
+      }
+    });
+    if (bad.length) { err.hidden = false; err.textContent = "Not added — fix " + bad.join("; ") + "."; }
+    else { err.hidden = true; }
+    if (add.length && !bad.length) { data = data.concat(add); document.getElementById("input").value = ""; draw(); }
+    if (!lines.length) { err.hidden = false; err.textContent = "Type at least one measurement first."; }
+  };
+
+  document.getElementById("clear").onclick = () => { data = []; hl = -1; draw(); };
+
+  document.getElementById("copy").onclick = () => {
+    const r1 = v => Math.round(v * 10) / 10;
+    const csv = ["type,dip_or_plunge,dipdir_or_trend,strike_rhr,n_points,rms_misfit"].concat(data.map(m =>
+      m.fit ? `fitted_plane,${r1(m.dip)},${r1(m.dd)},${r1(norm360(m.dd - 90))},${m.fit.n},${m.fit.n === 3 ? "" : sig(m.fit.rms)}`
+      : m.kind === "plane" ? `plane,${m.dip},${m.dd},${norm360(m.dd - 90)},,` : `line,${m.plunge},${m.trend},,,`)).join("\n");
+    const msg = document.getElementById("copyMsg");
+    const done = t => { msg.hidden = false; msg.textContent = t; };
+    try {
+      navigator.clipboard.writeText(csv).then(() => done("Copied " + data.length + " rows."), () => fallback());
+    } catch (e) { fallback(); }
+    function fallback() {
+      const ta = document.getElementById("input"); ta.value = csv; ta.select();
+      done("Clipboard blocked here. The CSV is selected in the input box; copy it with Ctrl/Cmd+C.");
+    }
+  };
+
+  // --- net type + options --------------------------------------------------
+  const bA = document.getElementById("netArea"), bG = document.getElementById("netAngle");
+  bA.onclick = () => { net = "area"; bA.setAttribute("aria-pressed", "true"); bG.setAttribute("aria-pressed", "false"); draw(); };
+  bG.onclick = () => { net = "angle"; bG.setAttribute("aria-pressed", "true"); bA.setAttribute("aria-pressed", "false"); draw(); };
+  ["optGrid", "optGC", "optPoles"].forEach(id => document.getElementById(id).onchange = draw);
+
+  // --- cursor readout -----------------------------------------------------
+  const cur = document.getElementById("cursor");
+  svg.addEventListener("pointermove", e => {
+    const pt = svg.createSVGPoint(); pt.x = e.clientX; pt.y = e.clientY;
+    const p = pt.matrixTransform(svg.getScreenCTM().inverse());
+    const tp = unproj(p.x, p.y);
+    if (!tp) { cur.innerHTML = "Cursor: <b>—</b>"; return; }
+    const pd = norm360(tp.trend + 180), pdip = 90 - tp.plunge;
+    cur.innerHTML = `Cursor line <b>${pad(tp.plunge, 2)}→${pad(tp.trend, 3)}</b> · as pole, plane <b>${pad(pdip, 2)}/${pad(pd, 3)}</b>`;
+  });
+  svg.addEventListener("pointerleave", () => { if (view === "2d") cur.innerHTML = "Cursor: <b>—</b>"; });
+
+  // --- 3D hemisphere view ---------------------------------------------------
+  // World axes: x = east, y = north, z = up. The net is the lower unit hemisphere (z <= 0),
+  // so every pole and line is a point on the bowl and every plane is a half-disc through its centre.
+  const cv = document.getElementById("net3d");
+  const ctx = cv.getContext("2d");
+  const CAM0 = { yaw: -30, pitch: 28, zoom: 1 };
+  const cam = { ...CAM0 };
+  let view = "2d", W3 = 0, S3 = 0, raf = 0;
+
+  // trend/plunge in degrees -> unit vector (plunge positive downward)
+  const tpVec = (t, p) => [Math.cos(rad(p)) * Math.sin(rad(t)), Math.cos(rad(p)) * Math.cos(rad(t)), -Math.sin(rad(p))];
+
+  // Lower half of a plane's great circle: strike direction -> dip vector -> opposite strike.
+  // Closing this path draws the strike line through the centre, giving the half-disc.
+  function gcPoints3(dip, dd) {
+    const s = tpVec(dd - 90, 0), v = tpVec(dd, dip), out = [];
+    for (let th = 0; th <= 180; th += 3) {
+      const c = Math.cos(rad(th)), sn = Math.sin(rad(th));
+      out.push([c * s[0] + sn * v[0], c * s[1] + sn * v[1], c * s[2] + sn * v[2]]);
+    }
+    return out;
+  }
+
+  // Orbit camera: yaw spins about the vertical axis, pitch is the camera's elevation above the horizon.
+  // Returns [screenX, screenY, depth]; depth > 0 is toward the viewer.
+  function p3(p) {
+    const y = rad(cam.yaw), ph = rad(cam.pitch);
+    const x1 = p[0] * Math.cos(y) - p[1] * Math.sin(y);
+    const y1 = p[0] * Math.sin(y) + p[1] * Math.cos(y);
+    const up = y1 * Math.sin(ph) + p[2] * Math.cos(ph);
+    const depth = -y1 * Math.cos(ph) + p[2] * Math.sin(ph);
+    const k = 5 / (5 - depth);          // mild perspective
+    const lift = 0.5 * Math.cos(ph);    // centres the bowl rather than its rim when seen from the side
+    return [W3 / 2 + x1 * k * S3, W3 / 2 - (up + lift) * k * S3, depth];
+  }
+
+  const req3D = () => { if (!raf) raf = requestAnimationFrame(draw3D); };
+
+  function draw3D() {
+    raf = 0;
+    W3 = cv.clientWidth;
+    if (!W3) return;
+    const dpr = window.devicePixelRatio || 1, px = Math.round(W3 * dpr);
+    if (cv.width !== px) { cv.width = px; cv.height = px; }
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W3, W3);
+    S3 = W3 * 0.38 * cam.zoom;
+
+    const css = getComputedStyle(document.documentElement);
+    const col = n => css.getPropertyValue(n).trim();
+    const ink = col("--ink"), grid = col("--grid"), plane = col("--plane"), lineC = col("--line-c"),
+          acc = col("--accent"), muted = col("--muted"), panel = col("--panel");
+    const showGrid = document.getElementById("optGrid").checked;
+    const showGC = document.getElementById("optGC").checked;
+    const showPoles = document.getElementById("optPoles").checked;
+
+    const fade = d => 0.25 + 0.75 * Math.max(0, Math.min(1, (d + 1) / 2)); // far side of the bowl drawn fainter
+    const path = (pts, close) => {
+      ctx.beginPath();
+      pts.forEach((p, i) => { const q = p3(p); i ? ctx.lineTo(q[0], q[1]) : ctx.moveTo(q[0], q[1]); });
+      if (close) ctx.closePath();
+    };
+    const fadeLine = (pts, color, w) => {
+      ctx.strokeStyle = color; ctx.lineWidth = w;
+      for (let i = 1; i < pts.length; i++) {
+        const a = p3(pts[i - 1]), b = p3(pts[i]);
+        ctx.globalAlpha = fade((a[2] + b[2]) / 2);
+        ctx.beginPath(); ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    };
+    const ring = (r, z, n = 96) => Array.from({ length: n + 1 }, (_, i) => {
+      const a = i / n * 2 * Math.PI; return [r * Math.sin(a), r * Math.cos(a), z];
+    });
+
+    // Horizontal projection plane, then the bowl's wireframe: plunge rings at 30/60 and meridians every 30 deg
+    const rim = ring(1, 0, 120);
+    path(rim, true); ctx.fillStyle = grid; ctx.globalAlpha = 0.16; ctx.fill(); ctx.globalAlpha = 1;
+    if (showGrid) {
+      [30, 60].forEach(p => fadeLine(ring(Math.cos(rad(p)), -Math.sin(rad(p))), grid, 1));
+      for (let t = 0; t < 180; t += 30) {
+        const pts = [];
+        for (let a = 0; a <= 180; a += 4) pts.push([Math.cos(rad(a)) * Math.sin(rad(t)), Math.cos(rad(a)) * Math.cos(rad(t)), -Math.sin(rad(a))]);
+        fadeLine(pts, grid, 1);
+      }
+    }
+    ctx.setLineDash([3, 4]); fadeLine([[0, 0, 0], [0, 0, -1]], muted, 1); ctx.setLineDash([]);
+    fadeLine(rim, ink, 1.4);
+
+    const dot = (v, c, h, diamond) => {
+      const o = p3([0, 0, 0]), q = p3(v);
+      ctx.strokeStyle = c; ctx.lineWidth = 1; ctx.globalAlpha = 0.5; ctx.setLineDash([2, 3]);
+      ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(q[0], q[1]); ctx.stroke();
+      ctx.setLineDash([]); ctx.globalAlpha = 1;
+      ctx.beginPath();
+      if (diamond) { ctx.moveTo(q[0], q[1] - 6); ctx.lineTo(q[0] + 6, q[1]); ctx.lineTo(q[0], q[1] + 6); ctx.lineTo(q[0] - 6, q[1]); ctx.closePath(); }
+      else ctx.arc(q[0], q[1], 5, 0, 2 * Math.PI);
+      ctx.fillStyle = c; ctx.fill(); ctx.strokeStyle = h ? ink : panel; ctx.lineWidth = h ? 2.4 : 1; ctx.stroke();
+    };
+    const arrow = (v, c, h) => {
+      const o = p3([0, 0, 0]), q = p3(v);
+      const dx = q[0] - o[0], dy = q[1] - o[1], L = Math.hypot(dx, dy);
+      ctx.strokeStyle = ctx.fillStyle = h ? ink : c;
+      if (L < 14) { ctx.beginPath(); ctx.arc(q[0], q[1], 5, 0, 2 * Math.PI); ctx.fill(); return; } // pointing at the camera
+      const ux = dx / L, uy = dy / L;
+      ctx.lineWidth = h ? 3 : 2.2;
+      ctx.beginPath(); ctx.moveTo(o[0], o[1]); ctx.lineTo(q[0] - ux * 8, q[1] - uy * 8); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(q[0], q[1]);
+      ctx.lineTo(q[0] - ux * 12 - uy * 6, q[1] - uy * 12 + ux * 6);
+      ctx.lineTo(q[0] - ux * 12 + uy * 6, q[1] - uy * 12 - ux * 6);
+      ctx.closePath(); ctx.fill();
+    };
+
+    // Data, painted back to front so nearer discs and points sit on top
+    const items = [];
+    data.forEach((m, i) => {
+      const h = i === hl;
+      if (m.kind === "plane") {
+        const fit = !!m.fit, c = fit ? acc : plane;
+        if (showGC) {
+          const pts = gcPoints3(m.dip, m.dd);
+          const centroid = tpVec(m.dd, m.dip).map(x => x * 0.42); // half-disc centroid lies 4/(3*pi) along the dip vector
+          items.push({ d: p3(centroid)[2], f: () => {
+            path(pts, true); ctx.fillStyle = c; ctx.globalAlpha = h ? 0.34 : 0.16; ctx.fill(); ctx.globalAlpha = 1;
+            ctx.setLineDash(fit ? [7, 4] : []);
+            path(pts, false); ctx.strokeStyle = h ? ink : c; ctx.lineWidth = h ? 2.6 : 1.8; ctx.stroke();
+            ctx.setLineDash([]);
+          } });
+        }
+        if (showPoles) {
+          const pv = tpVec(m.dd + 180, 90 - m.dip);
+          items.push({ d: p3(pv)[2] + 0.01, f: () => dot(pv, c, h, fit) });
+        }
+      } else {
+        const lv = tpVec(m.trend, m.plunge);
+        items.push({ d: p3(lv)[2] + 0.01, f: () => arrow(lv, lineC, h) });
+      }
+    });
+    items.sort((a, b) => a.d - b.d).forEach(it => it.f());
+
+    ctx.font = `600 13px ${col("--font-body")}`;
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    [["N", 0], ["E", 90], ["S", 180], ["W", 270]].forEach(([l, a]) => {
+      const q = p3([1.14 * Math.sin(rad(a)), 1.14 * Math.cos(rad(a)), 0]);
+      ctx.globalAlpha = fade(q[2]); ctx.fillStyle = l === "N" ? ink : muted; ctx.fillText(l, q[0], q[1]);
+    });
+    ctx.globalAlpha = 1;
+    cur.innerHTML = `Drag to rotate · scroll to zoom · viewing from <b>${az(cam.yaw + 180)}°</b>, elevation <b>${Math.round(cam.pitch)}°</b>`;
+  }
+
+  // Drag rotates (left-right = yaw, up-down = pitch); wheel zooms; double-click resets
+  let drag = null;
+  cv.addEventListener("pointerdown", e => {
+    drag = { x: e.clientX, y: e.clientY, yaw: cam.yaw, pitch: cam.pitch };
+    cv.setPointerCapture(e.pointerId); cv.classList.add("grabbing");
+  });
+  cv.addEventListener("pointermove", e => {
+    if (!drag) return;
+    cam.yaw = drag.yaw + (e.clientX - drag.x) * 0.5;
+    cam.pitch = Math.max(-10, Math.min(90, drag.pitch + (e.clientY - drag.y) * 0.4));
+    req3D();
+  });
+  const endDrag = () => { drag = null; cv.classList.remove("grabbing"); };
+  cv.addEventListener("pointerup", endDrag);
+  cv.addEventListener("pointercancel", endDrag);
+  cv.addEventListener("wheel", e => {
+    e.preventDefault();
+    cam.zoom = Math.max(0.6, Math.min(2.2, cam.zoom * Math.exp(-e.deltaY * 0.0015)));
+    req3D();
+  }, { passive: false });
+  const setCam = c => { Object.assign(cam, c); req3D(); };
+  cv.addEventListener("dblclick", () => setCam(CAM0));
+  document.getElementById("camTop").onclick = () => setCam({ yaw: 0, pitch: 90 });   // matches the 2D net: N up, E right
+  document.getElementById("camSide").onclick = () => setCam({ pitch: 0 });
+  document.getElementById("camReset").onclick = () => setCam(CAM0);
+
+  const v2 = document.getElementById("view2d"), v3 = document.getElementById("view3d");
+  function setView(v) {
+    view = v;
+    v2.setAttribute("aria-pressed", String(v === "2d"));
+    v3.setAttribute("aria-pressed", String(v === "3d"));
+    svg.toggleAttribute("hidden", v === "3d"); cv.hidden = v !== "3d"; // .hidden is HTML-only, so set the attribute on the SVG
+    document.getElementById("camBtns").hidden = v !== "3d";
+    bA.disabled = bG.disabled = v === "3d"; // Schmidt vs Wulff only applies to the flat projection
+    if (v === "2d") cur.innerHTML = "Cursor: <b>—</b>";
+    draw();
+  }
+  v2.onclick = () => setView("2d");
+  v3.onclick = () => setView("3d");
+  if (window.ResizeObserver) new ResizeObserver(() => { if (view === "3d") req3D(); }).observe(cv);
+  try { matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (view === "3d") req3D(); }); } catch (e) {}
+
+  draw();
+})();
+</script>
+
+</body></html>
