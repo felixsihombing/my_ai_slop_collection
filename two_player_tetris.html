@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Two Player Tetris with Gamepad Support</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* Tailwind slate-900 */
+            color: #f8fafc; /* Tailwind slate-50 */
+            overflow: hidden;
+            touch-action: none;
+        }
+        canvas {
+            background-color: #1e293b; /* Tailwind slate-800 */
+            border: 2px solid #334155; /* Tailwind slate-700 */
+            border-radius: 0.5rem;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.25);
+        }
+        .neon-text {
+            text-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+        .gamepad-indicator {
+            transition: all 0.3s ease;
+        }
+        .gamepad-active {
+            color: #4ade80; /* green-400 */
+            text-shadow: 0 0 10px rgba(74, 222, 128, 0.5);
+        }
+        .gamepad-inactive {
+            color: #64748b; /* slate-500 */
+        }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col items-center justify-center">
+
+    <!-- Header & Controls -->
+    <div class="mb-6 text-center">
+        <h1 class="text-4xl font-extrabold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500 neon-text">VERSUS TETRIS</h1>
+        <p class="text-sm text-slate-400 mb-4">Connect controllers or use keyboard to play.</p>
+        <button id="start-btn" class="px-6 py-2 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-bold rounded-full shadow-lg transform transition hover:scale-105 active:scale-95">
+            START GAME
+        </button>
+    </div>
+
+    <!-- Main Game Area -->
+    <div class="flex flex-col md:flex-row gap-8 items-start justify-center w-full max-w-5xl px-4">
+        
+        <!-- Player 1 -->
+        <div class="flex flex-col items-center">
+            <div class="flex justify-between w-full mb-2">
+                <div class="flex flex-col">
+                    <span class="text-xl font-bold text-blue-400">PLAYER 1</span>
+                    <span class="text-xs text-slate-400">WASD / Gamepad 1</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-slate-400 uppercase tracking-widest">Score</div>
+                    <div id="p1-score" class="text-2xl font-bold font-mono">0</div>
+                </div>
+            </div>
+            
+            <div class="flex gap-4">
+                <canvas id="p1-canvas" width="300" height="600"></canvas>
+                <div class="flex flex-col gap-4">
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-md">
+                        <div class="text-xs text-slate-400 uppercase tracking-widest mb-2 text-center">Next</div>
+                        <canvas id="p1-next" width="120" height="120"></canvas>
+                    </div>
+                    <div id="p1-gamepad" class="gamepad-indicator gamepad-inactive text-sm font-semibold text-center p-2 border border-slate-700 rounded-lg bg-slate-800">
+                        🎮 Gamepad Disconnected
+                    </div>
+                </div>
+            </div>
+            <div id="p1-gameover" class="hidden mt-4 text-red-500 font-bold text-xl neon-text animate-pulse">GAME OVER</div>
+        </div>
+
+        <!-- Player 2 -->
+        <div class="flex flex-col items-center">
+            <div class="flex justify-between w-full mb-2">
+                <div class="flex flex-col">
+                    <span class="text-xl font-bold text-purple-400">PLAYER 2</span>
+                    <span class="text-xs text-slate-400">ARROWS / Gamepad 2</span>
+                </div>
+                <div class="text-right">
+                    <div class="text-xs text-slate-400 uppercase tracking-widest">Score</div>
+                    <div id="p2-score" class="text-2xl font-bold font-mono">0</div>
+                </div>
+            </div>
+            
+            <div class="flex gap-4">
+                <canvas id="p2-canvas" width="300" height="600"></canvas>
+                <div class="flex flex-col gap-4">
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 shadow-md">
+                        <div class="text-xs text-slate-400 uppercase tracking-widest mb-2 text-center">Next</div>
+                        <canvas id="p2-next" width="120" height="120"></canvas>
+                    </div>
+                    <div id="p2-gamepad" class="gamepad-indicator gamepad-inactive text-sm font-semibold text-center p-2 border border-slate-700 rounded-lg bg-slate-800">
+                        🎮 Gamepad Disconnected
+                    </div>
+                </div>
+            </div>
+            <div id="p2-gameover" class="hidden mt-4 text-red-500 font-bold text-xl neon-text animate-pulse">GAME OVER</div>
+        </div>
+
+    </div>
+
+<script>
+    // --- Constants & Config ---
+    const COLS = 10;
+    const ROWS = 20;
+    const BLOCK_SIZE = 30; // 300 / 10
+    const NEXT_BLOCK_SIZE = 30; // 120 / 4
+
+    const SHAPES = [
+        [],
+        [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], // I
+        [[2,0,0], [2,2,2], [0,0,0]], // J
+        [[0,0,3], [3,3,3], [0,0,0]], // L
+        [[4,4], [4,4]], // O
+        [[0,5,5], [5,5,0], [0,0,0]], // S
+        [[0,6,0], [6,6,6], [0,0,0]], // T
+        [[7,7,0], [0,7,7], [0,0,0]]  // Z
+    ];
+
+    const COLORS = [
+        null,
+        '#06b6d4', // cyan-500
+        '#3b82f6', // blue-500
+        '#f97316', // orange-500
+        '#eab308', // yellow-500
+        '#22c55e', // green-500
+        '#a855f7', // purple-500
+        '#ef4444'  // red-500
+    ];
+
+    // --- Tetris Engine ---
+    class Tetris {
+        constructor(canvasId, nextCanvasId, scoreId, overId) {
+            this.canvas = document.getElementById(canvasId);
+            this.ctx = this.canvas.getContext('2d');
+            this.nextCanvas = document.getElementById(nextCanvasId);
+            this.nextCtx = this.nextCanvas.getContext('2d');
+            
+            this.scoreElement = document.getElementById(scoreId);
+            this.overElement = document.getElementById(overId);
+            
+            this.ctx.scale(BLOCK_SIZE, BLOCK_SIZE);
+            this.nextCtx.scale(NEXT_BLOCK_SIZE, NEXT_BLOCK_SIZE);
+
+            this.reset();
+        }
+
+        reset() {
+            this.board = Array.from({length: ROWS}, () => Array(COLS).fill(0));
+            this.score = 0;
+            this.scoreElement.innerText = this.score;
+            this.isGameOver = false;
+            this.overElement.classList.add('hidden');
+            
+            this.piece = this.generatePiece();
+            this.nextPiece = this.generatePiece();
+            
+            this.dropCounter = 0;
+            this.dropInterval = 1000; // ms per drop
+        }
+
+        generatePiece() {
+            const typeId = Math.floor(Math.random() * 7) + 1;
+            const matrix = SHAPES[typeId];
+            return {
+                matrix: matrix,
+                x: Math.floor(COLS / 2) - Math.floor(matrix[0].length / 2),
+                y: 0,
+                type: typeId
+            };
+        }
+
+        spawnNext() {
+            this.piece = this.nextPiece;
+            this.nextPiece = this.generatePiece();
+            if (this.collide()) {
+                this.isGameOver = true;
+                this.overElement.classList.remove('hidden');
+            }
+        }
+
+        drawMatrix(matrix, offset, context) {
+            matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        context.fillStyle = COLORS[value];
+                        context.fillRect(x + offset.x, y + offset.y, 1, 1);
+                        // Bevel effect
+                        context.fillStyle = 'rgba(255,255,255,0.3)';
+                        context.fillRect(x + offset.x, y + offset.y, 1, 0.1);
+                        context.fillRect(x + offset.x, y + offset.y, 0.1, 1);
+                        context.fillStyle = 'rgba(0,0,0,0.3)';
+                        context.fillRect(x + offset.x, y + offset.y + 0.9, 1, 0.1);
+                        context.fillRect(x + offset.x + 0.9, y + offset.y, 0.1, 1);
+                    }
+                });
+            });
+        }
+
+        draw() {
+            // Clear boards
+            this.ctx.fillStyle = '#1e293b';
+            this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            this.nextCtx.fillStyle = '#1e293b';
+            this.nextCtx.fillRect(0, 0, this.nextCanvas.width, this.nextCanvas.height);
+
+            if (this.isGameOver) return; // Optional: Draw board but greyed out?
+
+            // Draw Board
+            this.drawMatrix(this.board, {x: 0, y: 0}, this.ctx);
+            // Draw Active Piece
+            this.drawMatrix(this.piece.matrix, {x: this.piece.x, y: this.piece.y}, this.ctx);
+            
+            // Draw Next Piece (centered)
+            const nextOffset = {
+                x: (4 - this.nextPiece.matrix[0].length) / 2,
+                y: (4 - this.nextPiece.matrix.length) / 2
+            };
+            this.drawMatrix(this.nextPiece.matrix, nextOffset, this.nextCtx);
+        }
+
+        collide() {
+            const m = this.piece.matrix;
+            const o = this.piece;
+            for (let y = 0; y < m.length; ++y) {
+                for (let x = 0; x < m[y].length; ++x) {
+                    if (m[y][x] !== 0 &&
+                       (this.board[y + o.y] && this.board[y + o.y][x + o.x]) !== 0) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        merge() {
+            this.piece.matrix.forEach((row, y) => {
+                row.forEach((value, x) => {
+                    if (value !== 0) {
+                        this.board[y + this.piece.y][x + this.piece.x] = value;
+                    }
+                });
+            });
+        }
+
+        clearLines() {
+            let linesCleared = 0;
+            outer: for (let y = this.board.length - 1; y >= 0; --y) {
+                for (let x = 0; x < this.board[y].length; ++x) {
+                    if (this.board[y][x] === 0) continue outer;
+                }
+                const row = this.board.splice(y, 1)[0].fill(0);
+                this.board.unshift(row);
+                ++y;
+                linesCleared++;
+            }
+            if (linesCleared > 0) {
+                // Score calculation
+                const lineScores = [0, 40, 100, 300, 1200];
+                this.score += lineScores[linesCleared];
+                this.scoreElement.innerText = this.score;
+                // Speed up slightly
+                this.dropInterval = Math.max(100, this.dropInterval - 20); 
+            }
+        }
+
+        move(dir) {
+            if (this.isGameOver) return;
+            this.piece.x += dir;
+            if (this.collide()) {
+                this.piece.x -= dir;
+            }
+        }
+
+        drop() {
+            if (this.isGameOver) return;
+            this.piece.y++;
+            if (this.collide()) {
+                this.piece.y--;
+                this.merge();
+                this.clearLines();
+                this.spawnNext();
+            }
+            this.dropCounter = 0; // reset automatic drop timer
+        }
+
+        rotate() {
+            if (this.isGameOver) return;
+            // Transpose
+            for (let y = 0; y < this.piece.matrix.length; ++y) {
+                for (let x = 0; x < y; ++x) {
+                    [this.piece.matrix[x][y], this.piece.matrix[y][x]] = 
+                    [this.piece.matrix[y][x], this.piece.matrix[x][y]];
+                }
+            }
+            // Reverse rows
+            this.piece.matrix.forEach(row => row.reverse());
+            
+            // Wall Kick logic
+            const pos = this.piece.x;
+            let offset = 1;
+            while (this.collide()) {
+                this.piece.x += offset;
+                offset = -(offset + (offset > 0 ? 1 : -1));
+                if (offset > this.piece.matrix[0].length) {
+                    // Rotate back if wall kick fails
+                    this.piece.matrix.forEach(row => row.reverse());
+                    for (let y = 0; y < this.piece.matrix.length; ++y) {
+                        for (let x = 0; x < y; ++x) {
+                            [this.piece.matrix[x][y], this.piece.matrix[y][x]] = 
+                            [this.piece.matrix[y][x], this.piece.matrix[x][y]];
+                        }
+                    }
+                    this.piece.x = pos;
+                    return;
+                }
+            }
+        }
+
+        update(deltaTime) {
+            if (this.isGameOver) {
+                this.draw(); // Ensure it draws final state
+                return;
+            }
+            
+            this.dropCounter += deltaTime;
+            if (this.dropCounter > this.dropInterval) {
+                this.drop();
+            }
+            this.draw();
+        }
+    }
+
+    // --- Game Setup ---
+    const p1 = new Tetris('p1-canvas', 'p1-next', 'p1-score', 'p1-gameover');
+    const p2 = new Tetris('p2-canvas', 'p2-next', 'p2-score', 'p2-gameover');
+
+    let lastTime = 0;
+    let gameRunning = false;
+    let animationId;
+
+    // --- Input Management ---
+
+    // Gamepad state tracking for debouncing
+    const gamepadState = {
+        0: { left: false, right: false, down: false, rotate: false },
+        1: { left: false, right: false, down: false, rotate: false }
+    };
+    
+    // Custom Repeat rates for Gamepad (DAS)
+    const dasTimers = {
+        0: { left: 0, right: 0, down: 0 },
+        1: { left: 0, right: 0, down: 0 }
+    };
+    const DAS_DELAY = 150; // Initial delay before repeating
+    const DAS_REPEAT = 50; // Repeat rate
+
+    function processGamepadInput(player, index, deltaTime) {
+        const gamepads = navigator.getGamepads();
+        const gp = gamepads[index];
+        
+        // Update UI Status
+        const uiElement = document.getElementById(`p${index+1}-gamepad`);
+        if (gp) {
+            uiElement.classList.add('gamepad-active');
+            uiElement.classList.remove('gamepad-inactive');
+            uiElement.innerText = `🎮 Gamepad ${index+1} Ready`;
+        } else {
+            uiElement.classList.remove('gamepad-active');
+            uiElement.classList.add('gamepad-inactive');
+            uiElement.innerText = '🎮 Gamepad Disconnected';
+            return;
+        }
+
+        if (player.isGameOver || !gameRunning) return;
+
+        const state = gamepadState[index];
+        const timers = dasTimers[index];
+
+        // Mapping: 
+        // D-Pad: Left (14), Right (15), Down (13), Up (12)
+        // Face Buttons: A/Cross (0), B/Circle (1), X/Square (2), Y/Triangle (3)
+        // Axes: Left Stick X (0), Left Stick Y (1)
+
+        const leftPressed = gp.buttons[14].pressed || gp.axes[0] < -0.5;
+        const rightPressed = gp.buttons[15].pressed || gp.axes[0] > 0.5;
+        const downPressed = gp.buttons[13].pressed || gp.axes[1] > 0.5;
+        // Any face button to rotate
+        const rotatePressed = gp.buttons[0].pressed || gp.buttons[1].pressed || gp.buttons[2].pressed || gp.buttons[3].pressed || gp.buttons[12].pressed || gp.axes[1] < -0.5; 
+
+        // Handle Rotate (Single trigger)
+        if (rotatePressed && !state.rotate) {
+            player.rotate();
+        }
+        state.rotate = rotatePressed;
+
+        // Helper for movement with DAS (Delayed Auto Shift)
+        function handleMove(isPressed, timerKey, actionFunc) {
+            if (isPressed) {
+                if (!state[timerKey]) {
+                    actionFunc(); // Initial press trigger
+                    timers[timerKey] = 0;
+                } else {
+                    timers[timerKey] += deltaTime;
+                    if (timers[timerKey] > DAS_DELAY) {
+                        timers[timerKey] = DAS_DELAY - DAS_REPEAT; // reset for next tick
+                        actionFunc();
+                    }
+                }
+            } else {
+                timers[timerKey] = 0;
+            }
+            state[timerKey] = isPressed;
+        }
+
+        handleMove(leftPressed, 'left', () => player.move(-1));
+        handleMove(rightPressed, 'right', () => player.move(1));
+        handleMove(downPressed, 'down', () => player.drop());
+    }
+
+    // Keyboard Input
+    document.addEventListener('keydown', event => {
+        if (!gameRunning) return;
+
+        // Player 1 (WASD)
+        if (!p1.isGameOver) {
+            if (event.code === 'KeyA') p1.move(-1);
+            if (event.code === 'KeyD') p1.move(1);
+            if (event.code === 'KeyS') p1.drop();
+            if (event.code === 'KeyW') p1.rotate();
+        }
+
+        // Player 2 (Arrows)
+        if (!p2.isGameOver) {
+            if (event.code === 'ArrowLeft') p2.move(-1);
+            if (event.code === 'ArrowRight') p2.move(1);
+            if (event.code === 'ArrowDown') p2.drop();
+            if (event.code === 'ArrowUp') p2.rotate();
+        }
+    });
+
+    // Game Loop
+    function update(time = 0) {
+        const deltaTime = time - lastTime;
+        lastTime = time;
+
+        if (gameRunning) {
+            // Poll gamepads
+            if (navigator.getGamepads) {
+                processGamepadInput(p1, 0, deltaTime);
+                processGamepadInput(p2, 1, deltaTime);
+            }
+
+            p1.update(deltaTime);
+            p2.update(deltaTime);
+        }
+
+        animationId = requestAnimationFrame(update);
+    }
+
+    // Start / Restart logic
+    document.getElementById('start-btn').addEventListener('click', () => {
+        p1.reset();
+        p2.reset();
+        gameRunning = true;
+        document.getElementById('start-btn').innerText = 'RESTART GAME';
+        
+        // ensure canvas is focused implicitly if needed
+        document.body.focus();
+    });
+
+    // Initial rendering without updating game logic
+    p1.draw();
+    p2.draw();
+    
+    // Start animation loop to allow gamepad polling for UI even when not playing
+    animationId = requestAnimationFrame(update);
+
+    // Event listener for Gamepad Connection (UI updates immediately instead of polling only)
+    window.addEventListener("gamepadconnected", (e) => {
+        console.log("Gamepad connected at index %d: %s. %d buttons, %d axes.",
+            e.gamepad.index, e.gamepad.id,
+            e.gamepad.buttons.length, e.gamepad.axes.length);
+    });
+
+    window.addEventListener("gamepaddisconnected", (e) => {
+        console.log("Gamepad disconnected from index %d: %s",
+            e.gamepad.index, e.gamepad.id);
+    });
+
+</script>
+</body>
+</html>
